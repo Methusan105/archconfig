@@ -48,7 +48,9 @@
     "ntp": true,
     "packages": [
         "konsole",
-        "dolphin"
+        "dolphin",
+        "zip",
+        "unzip"
     ],
     "pacman_config": {
         "color": true,
