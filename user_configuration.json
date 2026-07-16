@@ -74,11 +74,6 @@
   },
 
   "services": [
-    "bluetooth",
-    "fstrim.timer",
-    "thermald",
-    "power-profiles-daemon",
-    "systemd-resolved"
   ],
 
   "swap": {
