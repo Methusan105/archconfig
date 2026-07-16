@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/user/bin/env bash
 set -e
 
 export MAKEFLAGS="-j$(nproc)"
@@ -7,7 +7,7 @@ export PIP_BREAK_SYSTEM_PACKAGES=1
 
 echo "=== Installing base packages ==="
 
-pacman -S --needed --noconfirm \
+pacman -S --needed --noconfirm --ask=4 \
 git \
 base-devel \
 sudo \
@@ -46,7 +46,7 @@ systemctl enable --now clear-ram.timer
 
 echo "=== Installing zram ==="
 
-pacman -S --needed --noconfirm zram-generator
+pacman -S --needed --noconfirm --ask=4 zram-generator
 
 
 cat > /etc/systemd/zram-generator.conf <<EOF
@@ -58,7 +58,6 @@ EOF
 
 systemctl daemon-reload
 systemctl restart systemd-zram-setup@zram0.service
-
 
 zramctl
 
@@ -117,15 +116,14 @@ EOF
 systemctl daemon-reload
 systemctl enable --now undervolt.service
 
-echo "=== Removing PulseAudio and installing PipeWire ==="
+echo "=== Removing PulseAudio ==="
 
-pacman -Rns --noconfirm \
-pulseaudio \
-pulseaudio-bluetooth \
-|| true
+pacman -Rdd --noconfirm pulseaudio pulseaudio-bluetooth || true
 
 
-pacman -S --needed --noconfirm \
+echo "=== Installing PipeWire audio stack ==="
+
+pacman -S --needed --noconfirm --ask=4 \
 bluedevil \
 plasma-pa \
 pipewire \
@@ -138,20 +136,22 @@ systemctl enable --now bluetooth
 
 echo "=== Restarting PipeWire ==="
 
-if [ -n "$SUDO_USER" ]; then
+REAL_USER=$(logname 2>/dev/null || true)
 
-    USER_ID=$(id -u "$SUDO_USER")
+if [ -n "$REAL_USER" ]; then
 
-    sudo -u "$SUDO_USER" \
+    USER_ID=$(id -u "$REAL_USER")
+
+    sudo -u "$REAL_USER" \
     XDG_RUNTIME_DIR=/run/user/$USER_ID \
-    systemctl --user restart pipewire wireplumber pipewire-pulse
+    systemctl --user restart pipewire wireplumber pipewire-pulse || true
 
 fi
 
 
 echo "=== Updating GRUB ==="
 
-pacman -S --needed --noconfirm \
+pacman -S --needed --noconfirm --ask=4 \
 grub \
 os-prober
 
@@ -164,7 +164,7 @@ sed -i \
 mkdir -p /boot/grub
 
 
-grub-install \
+yes | grub-install \
 --target=x86_64-efi \
 --efi-directory=/efi \
 --bootloader-id=ArchGRUB \
@@ -175,6 +175,7 @@ grub-mkconfig -o /boot/grub/grub.cfg
 
 
 echo "=== Adding Arch ISO boot entry ==="
+
 
 if ! grep -q "Arch Linux Installer ISO" /etc/grub.d/40_custom; then
 
@@ -199,10 +200,12 @@ grub-mkconfig -o /boot/grub/grub.cfg
 
 echo "=== Installing yay and AUR packages ==="
 
-REAL_USER="$SUDO_USER"
+
+REAL_USER=$(logname 2>/dev/null || true)
+
 
 if [ -z "$REAL_USER" ]; then
-    echo "ERROR: Script must be run with sudo ./script.sh"
+    echo "ERROR: Could not detect logged in user"
     exit 1
 fi
 
@@ -231,16 +234,15 @@ echo "=== Cleaning temporary files ==="
 rm -rf /tmp/yay
 
 
-echo "=== Enabling useful services ==="
+echo "=== Final system update ==="
 
-systemctl daemon-reload
-
-
-echo "=== Final package update ==="
-
-pacman -Syu --noconfirm
+pacman -Syu --noconfirm --ask=4
 
 
 echo "=== Setup complete ==="
 
-echo "Reboot recommended."
+echo ""
+echo "====================================="
+echo " Finished!"
+echo " Reboot recommended."
+echo "====================================="
