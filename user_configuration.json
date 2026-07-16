@@ -45,12 +45,7 @@
   "packages": [
     "konsole",
     "dolphin",
-    "ark",
     "kate",
-    "gwenview",
-    "spectacle",
-    "filelight",
-
     "zip",
     "unzip",
     "vlc",
@@ -59,32 +54,7 @@
     "transmission-qt",
     "aria2",
     "spotify-launcher",
-
-    "intel-ucode",
-
-    "pipewire",
-    "pipewire-pulse",
-    "wireplumber",
-    "bluedevil",
-    "plasma-pa",
-
-    "mesa",
-    "intel-media-driver",
-
-    "thermald",
-    "power-profiles-daemon",
-    "systemd-zram-generator",
-
-    "reflector",
-
-    "fastfetch",
-    "btop",
-    "eza",
-    "bat",
-    "fd",
-    "ripgrep",
-    "fzf",
-    "zoxide"
+    "fastfetch"
   ],
 
   "pacman_config": {
