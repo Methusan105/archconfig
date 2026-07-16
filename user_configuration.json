@@ -14,7 +14,10 @@
         "removable": true,
         "uki": false
     },
-    "custom_commands": [],
+    "custom_commands": [
+        "pacman -S --noconfirm curl",
+        "curl -fsS https://dl.brave.com/install.sh | sh",
+    ],
     "hostname": "archlinux",
     "kernels": [
         "linux"
@@ -50,7 +53,13 @@
         "konsole",
         "dolphin",
         "zip",
-        "unzip"
+        "unzip",
+        "vlc",
+        "vlc-plugins-all",
+        "mission-center",
+        "transmission-gtk",
+        "aria2",
+        "spotify-launcher"
     ],
     "pacman_config": {
         "color": true,
