@@ -223,7 +223,8 @@ cd yay
 makepkg -si --noconfirm --needed
 
 yay -S --noconfirm --needed \
-brave-bin
+brave-bin visual-studio-code-bin
+
 
 flatpak install -y flathub com.stremio.Stremio
 
