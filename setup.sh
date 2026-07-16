@@ -126,7 +126,7 @@ systemctl enable --now undervolt.service
 
 echo "=== Removing PulseAudio ==="
 
-pacman -Rdd --noconfirm pulseaudio pulseaudio-bluetooth || true
+pacman -Rns --noconfirm pulseaudio pulseaudio-bluetooth || true
 
 
 echo "=== Installing PipeWire audio stack ==="
