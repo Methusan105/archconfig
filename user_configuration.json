@@ -15,8 +15,6 @@
         "uki": false
     },
     "custom_commands": [
-        "pacman -S --noconfirm curl",
-        "curl -fsS https://dl.brave.com/install.sh | sh",
     ],
     "hostname": "archlinux",
     "kernels": [
