@@ -17,7 +17,7 @@
     "custom_commands": [
         "pacman -S --noconfirm git base-devel sudo",
         "su - methu -c 'cd /tmp && rm -rf yay && git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -si --noconfirm'",
-        "su - methu -c 'yay -S --noconfirm brave-bin'"
+        "su - methu -c 'yay -S --noconfirm brave-bin stremio'"
     ],
     "hostname": "archlinux",
     "kernels": [
