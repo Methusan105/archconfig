@@ -30,7 +30,7 @@ systemctl enable --now clear-ram.timer
 
 echo "=== Installing zram ==="
 
-pacman -S --noconfirm zram-generator
+pacman -S --needed --noconfirm zram-generator
 
 cat > /etc/systemd/zram-generator.conf <<EOF
 [zram0]
@@ -39,7 +39,7 @@ compression-algorithm = zstd
 EOF
 
 systemctl daemon-reload
-systemctl start systemd-zram-setup@zram0.service
+systemctl restart systemd-zram-setup@zram0.service
 
 zramctl
 
@@ -48,12 +48,18 @@ echo "=== Installing MacTahoe themes ==="
 
 pacman -S --needed --noconfirm git
 
+cd /tmp
+
+rm -rf MacTahoe-icon-theme
 git clone https://github.com/vinceliuice/MacTahoe-icon-theme
+
 cd MacTahoe-icon-theme
 ./install.sh
 cd ..
 
+rm -rf MacTahoe-kde
 git clone https://github.com/vinceliuice/MacTahoe-kde
+
 cd MacTahoe-kde
 ./install.sh
 cd ..
@@ -96,7 +102,16 @@ wireplumber
 
 systemctl enable --now bluetooth
 
-systemctl --user restart pipewire wireplumber pipewire-pulse
+
+echo "=== Restarting PipeWire ==="
+
+if [ -n "$SUDO_USER" ]; then
+    USER_ID=$(id -u "$SUDO_USER")
+
+    sudo -u "$SUDO_USER" \
+    XDG_RUNTIME_DIR=/run/user/$USER_ID \
+    systemctl --user restart pipewire wireplumber pipewire-pulse
+fi
 
 
 echo "=== Updating GRUB ==="
@@ -117,6 +132,8 @@ grub-mkconfig -o /boot/grub/grub.cfg
 
 echo "=== Adding Arch ISO boot entry ==="
 
+if ! grep -q "Arch Linux Installer ISO" /etc/grub.d/40_custom; then
+
 cat >> /etc/grub.d/40_custom <<'EOF'
 
 menuentry "Arch Linux Installer ISO" {
@@ -125,10 +142,52 @@ menuentry "Arch Linux Installer ISO" {
     linux (loop)/arch/boot/x86_64/vmlinuz-linux img_dev=/dev/nvme0n1p6 img_loop=$iso_path
     initrd (loop)/arch/boot/x86_64/initramfs-linux.img
 }
+
 EOF
+
+fi
 
 chmod +x /etc/grub.d/40_custom
 
 grub-mkconfig -o /boot/grub/grub.cfg
+
+
+echo "=== Installing yay and AUR packages ==="
+
+pacman -S --needed --noconfirm \
+git \
+base-devel \
+sudo
+
+
+REAL_USER="$SUDO_USER"
+
+if [ -z "$REAL_USER" ]; then
+    echo "ERROR: Run this script using sudo ./script.sh"
+    exit 1
+fi
+
+
+sudo -u "$REAL_USER" bash <<EOF
+
+cd /tmp
+
+rm -rf yay
+
+git clone https://aur.archlinux.org/yay.git
+
+cd yay
+
+makepkg -si --noconfirm
+
+yay -S --noconfirm brave-bin stremio
+
+EOF
+
+
+echo "=== Cleaning temporary files ==="
+
+rm -rf /tmp/yay
+
 
 echo "=== Done ==="
