@@ -12,7 +12,14 @@ git \
 base-devel \
 sudo \
 python \
-python-pip
+python-pip \
+flatpak
+
+
+echo "=== Adding Flathub ==="
+
+flatpak remote-add --if-not-exists flathub \
+https://flathub.org/repo/flathub.flatpakrepo
 
 
 echo "=== Creating RAM flush service ==="
@@ -116,6 +123,7 @@ EOF
 systemctl daemon-reload
 systemctl enable --now undervolt.service
 
+
 echo "=== Removing PulseAudio ==="
 
 pacman -Rdd --noconfirm pulseaudio pulseaudio-bluetooth || true
@@ -147,7 +155,6 @@ if [ -n "$REAL_USER" ]; then
     systemctl --user restart pipewire wireplumber pipewire-pulse || true
 
 fi
-
 
 echo "=== Updating GRUB ==="
 
@@ -198,42 +205,26 @@ chmod +x /etc/grub.d/40_custom
 
 grub-mkconfig -o /boot/grub/grub.cfg
 
-echo "=== Installing yay and AUR packages ==="
 
+echo "=== Installing Brave, VS Code and Stremio through Flatpak ==="
 
-REAL_USER=$(logname 2>/dev/null || true)
-
-
-if [ -z "$REAL_USER" ]; then
-    echo "ERROR: Could not detect logged in user"
-    exit 1
-fi
-
-
-sudo -u "$REAL_USER" bash <<EOF
-
-cd /tmp
-
-rm -rf yay
-
-git clone https://aur.archlinux.org/yay.git
-
-cd yay
-
-makepkg -si --noconfirm --needed
-
-yay -S --noconfirm --needed \
-brave-bin visual-studio-code-bin
-
-
-flatpak install -y flathub com.stremio.Stremio
-
-EOF
+flatpak install -y flathub \
+com.brave.Browser \
+com.visualstudio.code \
+com.stremio.Stremio
 
 
 echo "=== Cleaning temporary files ==="
 
-rm -rf /tmp/yay
+rm -rf /tmp/MacTahoe-icon-theme
+rm -rf /tmp/MacTahoe-kde
+
+
+echo "=== Cleaning package caches ==="
+
+pacman -Sc --noconfirm || true
+
+flatpak uninstall --unused -y || true
 
 
 echo "=== Final system update ==="
@@ -246,5 +237,13 @@ echo "=== Setup complete ==="
 echo ""
 echo "====================================="
 echo " Finished!"
+echo ""
+echo " Installed:"
+echo " - Brave Browser (Flatpak)"
+echo " - Visual Studio Code (Flatpak)"
+echo " - Stremio (Flatpak)"
+echo ""
+echo " No yay installed."
+echo " No AUR packages used."
 echo " Reboot recommended."
 echo "====================================="
