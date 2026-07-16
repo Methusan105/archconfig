@@ -1,87 +1,85 @@
 {
-  "app_config": {
-    "bluetooth_config": {
-      "enabled": true
-    }
-  },
-
-  "archinstall_language": "English",
-
-  "bootloader_config": {
-    "bootloader": "Grub",
-    "removable": true,
-    "uki": false
-  },
-
-  "hostname": "archlinux",
-
-  "kernels": [
-    "linux-zen",
-    "linux"
-  ],
-
-  "locale_config": {
-    "console_font": "default8x16",
-    "kb_layout": "no",
-    "sys_enc": "UTF-8",
-    "sys_lang": "nb_NO.UTF-8"
-  },
-
-  "mirror_config": {
-    "mirror_regions": {
-      "Norway": [
-        "https://mirror.archlinux.no/$repo/os/$arch",
-        "https://mirror.neuf.no/archlinux/$repo/os/$arch"
-      ]
-    }
-  },
-
-  "network_config": {
-    "type": "nm"
-  },
-
-  "ntp": true,
-
-  "packages": [
-    "konsole",
-    "dolphin",
-    "kate",
-    "zip",
-    "unzip",
-    "vlc",
-    "vlc-plugins-all",
-    "mission-center",
-    "transmission-qt",
-    "aria2",
-    "spotify-launcher",
-    "fastfetch"
-  ],
-
-  "pacman_config": {
-    "color": true,
-    "parallel_downloads": 10
-  },
-
-  "profile_config": {
-    "gfx_driver": "Intel (open-source)",
-    "greeter": "plasma-login-manager",
-    "profile": {
-      "details": [
-        "KDE Plasma"
-      ],
-      "main": "Desktop"
-    }
-  },
-
-  "services": [
-  ],
-
-  "swap": {
-    "algorithm": "zstd",
-    "enabled": true
-  },
-
-  "timezone": "Europe/Oslo",
-
-  "version": "4.4"
+    "app_config": {
+        "bluetooth_config": {
+            "enabled": true
+        }
+    },
+    "archinstall_language": "English",
+    "auth_config": {},
+    "bootloader_config": {
+        "bootloader": "Grub",
+        "removable": true,
+        "uki": false
+    },
+    "custom_commands": [],
+    "hostname": "archlinux",
+    "kernels": [
+        "linux"
+    ],
+    "locale_config": {
+        "console_font": "default8x16",
+        "kb_layout": "no",
+        "sys_enc": "UTF-8",
+        "sys_lang": "nb_NO.UTF-8"
+    },
+    "mirror_config": {
+        "custom_repositories": [],
+        "custom_servers": [],
+        "mirror_regions": {
+            "Norway": [
+                "http://mirror.archlinux.no/$repo/os/$arch",
+                "https://mirror.archlinux.no/$repo/os/$arch",
+                "http://archlinux.uib.no/$repo/os/$arch",
+                "http://mirror.neuf.no/archlinux/$repo/os/$arch",
+                "https://mirror.neuf.no/archlinux/$repo/os/$arch",
+                "https://archlinux.lysakermoen.com/$repo/os/$arch",
+                "http://no.mirror.cx/archlinux/$repo/os/$arch",
+                "https://no.mirror.cx/archlinux/$repo/os/$arch"
+            ]
+        },
+        "optional_repositories": []
+    },
+    "network_config": {
+        "type": "nm"
+    },
+    "ntp": true,
+    "packages": [
+        "konsole",
+        "dolphin",
+        "zip",
+        "unzip",
+        "vlc",
+        "vlc-plugins-all",
+        "mission-center",
+        "transmission-gtk",
+        "aria2",
+        "spotify-launcher"
+    ],
+    "pacman_config": {
+        "color": true,
+        "parallel_downloads": 5
+    },
+    "profile_config": {
+        "gfx_driver": "Intel (open-source)",
+        "greeter": "plasma-login-manager",
+        "profile": {
+            "custom_settings": {
+                "KDE Plasma": {
+                    "plasma_flavor": "plasma-meta"
+                }
+            },
+            "details": [
+                "KDE Plasma"
+            ],
+            "main": "Desktop"
+        }
+    },
+    "script": null,
+    "services": [],
+    "swap": {
+        "algorithm": "zstd",
+        "enabled": true
+    },
+    "timezone": "Europe/Oslo",
+    "version": "4.4"
 }
