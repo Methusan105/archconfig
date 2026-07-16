@@ -223,8 +223,9 @@ cd yay
 makepkg -si --noconfirm --needed
 
 yay -S --noconfirm --needed \
-brave-bin \
-stremio
+brave-bin
+
+flatpak install -y flathub com.stremio.Stremio
 
 EOF
 
