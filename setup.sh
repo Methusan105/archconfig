@@ -1,112 +1,208 @@
 #!/usr/bin/env bash
-set -e
+set -Eeuo pipefail
+
+#############################################
+# Arch NUC10 KDE Optimization Setup
+#############################################
+
+if [ "$EUID" -ne 0 ]; then
+    echo "Run with sudo"
+    exit 1
+fi
+
 
 export MAKEFLAGS="-j$(nproc)"
 export GIT_TERMINAL_PROMPT=0
-export PIP_BREAK_SYSTEM_PACKAGES=1
 
-echo "=== Installing base packages ==="
 
-pacman -S --needed --noconfirm --ask=4 \
+REAL_USER="${SUDO_USER:-$(whoami)}"
+
+
+#############################################
+# CONFIG
+#############################################
+
+ISO_PATH="/archlinux-x86_64.iso"
+ISO_DEVICE="/dev/nvme0n1p6"
+
+
+WORKDIR="/tmp/archconfig"
+
+mkdir -p "$WORKDIR"
+
+
+#############################################
+# PACKAGES
+#############################################
+
+echo "== Installing packages =="
+
+pacman -S --needed --noconfirm \
 git \
 base-devel \
-sudo \
 python \
-python-pip
+python-pip \
+reflector \
+thermald \
+power-profiles-daemon \
+systemd-zram-generator \
+pipewire \
+pipewire-pulse \
+wireplumber \
+bluedevil \
+plasma-pa \
+mesa \
+intel-media-driver \
+intel-ucode \
+fastfetch \
+btop \
+eza \
+bat \
+fd \
+ripgrep \
+fzf \
+zoxide \
+ark \
+gwenview \
+spectacle \
+filelight \
+partitionmanager \
+plasma-systemmonitor \
+grub \
+os-prober
 
 
-echo "=== Creating RAM flush service ==="
+#############################################
+# PACMAN
+#############################################
 
-cat > /etc/systemd/system/clear-ram.service <<EOF
-[Unit]
-Description=Flush RAM
+echo "== Optimizing pacman =="
 
-[Service]
-Type=oneshot
-ExecStart=/bin/sh -c "sync && echo 3 > /proc/sys/vm/drop_caches"
-EOF
+sed -i 's/^#Color/Color/' /etc/pacman.conf
 
+grep -q "ILoveCandy" /etc/pacman.conf || \
+sed -i '/Color/a ILoveCandy' /etc/pacman.conf
 
-cat > /etc/systemd/system/clear-ram.timer <<EOF
-[Unit]
-Description=Every 2 Hour RAM Flush
-
-[Timer]
-OnCalendar=*-*-* 0/2:00:00
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-EOF
+sed -i \
+'s/^#\?ParallelDownloads.*/ParallelDownloads = 10/' \
+/etc/pacman.conf
 
 
-systemctl daemon-reload
-systemctl enable --now clear-ram.timer
+#############################################
+# MIRRORS
+#############################################
+
+echo "== Updating mirrors =="
+
+reflector \
+--country Norway,Sweden,Denmark,Finland \
+--latest 20 \
+--protocol https \
+--sort rate \
+--save /etc/pacman.d/mirrorlist
 
 
-echo "=== Installing zram ==="
+systemctl enable reflector.timer
 
-pacman -S --needed --noconfirm --ask=4 zram-generator
 
+#############################################
+# ZRAM
+#############################################
+
+echo "== Configuring ZRAM =="
 
 cat > /etc/systemd/zram-generator.conf <<EOF
 [zram0]
-zram-size = 16384
+zram-size = 8192
 compression-algorithm = zstd
+swap-priority = 100
 EOF
 
 
 systemctl daemon-reload
-systemctl restart systemd-zram-setup@zram0.service
-
-zramctl
 
 
-echo "=== Installing MacTahoe themes ==="
+#############################################
+# SERVICES
+#############################################
 
-cd /tmp
+echo "== Enabling services =="
 
-
-rm -rf MacTahoe-icon-theme
-
-git clone https://github.com/vinceliuice/MacTahoe-icon-theme
-
-cd MacTahoe-icon-theme
-
-yes | ./install.sh
-
-cd ..
+systemctl enable --now \
+bluetooth \
+fstrim.timer \
+thermald \
+power-profiles-daemon \
+systemd-resolved
 
 
-rm -rf MacTahoe-kde
+#############################################
+# INTEL GRAPHICS
+#############################################
 
-git clone https://github.com/vinceliuice/MacTahoe-kde
+echo "== Intel graphics =="
 
-cd MacTahoe-kde
-
-yes | ./install.sh
-
-cd ..
-
-
-echo "=== Installing undervolt ==="
-
-python3 -m pip install --break-system-packages undervolt
+cat > /etc/environment <<EOF
+LIBVA_DRIVER_NAME=iHD
+EOF
 
 
-UNDERVOLT="$(command -v undervolt)"
+if grep -q "^MODULES=" /etc/mkinitcpio.conf; then
 
+    sed -i \
+    's/^MODULES=.*/MODULES=(i915)/' \
+    /etc/mkinitcpio.conf
+
+else
+
+    echo "MODULES=(i915)" >> /etc/mkinitcpio.conf
+
+fi
+
+
+mkinitcpio -P
+
+
+#############################################
+# MEMORY TUNING
+#############################################
+
+echo "== Kernel tuning =="
+
+cat > /etc/sysctl.d/99-performance.conf <<EOF
+vm.swappiness=10
+vm.vfs_cache_pressure=50
+vm.dirty_ratio=10
+vm.dirty_background_ratio=5
+EOF
+
+
+sysctl --system
+
+
+#############################################
+# UNDERVOLT
+#############################################
+
+echo "== Installing undervolt =="
+
+python3 -m pip install --break-system-packages undervolt || true
+
+
+UNDERVOLT_BIN="$(command -v undervolt || true)"
+
+
+if [ -n "$UNDERVOLT_BIN" ]; then
 
 cat > /etc/systemd/system/undervolt.service <<EOF
 [Unit]
-Description=Apply undervolt settings at boot
+Description=Intel undervolt
 After=multi-user.target
-ConditionPathExists=$UNDERVOLT
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=$UNDERVOLT --turbo 1
+ExecStart=$UNDERVOLT_BIN --turbo 1
 
 [Install]
 WantedBy=multi-user.target
@@ -114,77 +210,48 @@ EOF
 
 
 systemctl daemon-reload
-systemctl enable --now undervolt.service
-
-echo "=== Removing PulseAudio ==="
-
-pacman -Rdd --noconfirm pulseaudio pulseaudio-bluetooth || true
-
-
-echo "=== Installing PipeWire audio stack ==="
-
-pacman -S --needed --noconfirm --ask=4 \
-bluedevil \
-plasma-pa \
-pipewire \
-pipewire-pulse \
-wireplumber
-
-
-systemctl enable --now bluetooth
-
-
-echo "=== Restarting PipeWire ==="
-
-REAL_USER=$(logname 2>/dev/null || true)
-
-if [ -n "$REAL_USER" ]; then
-
-    USER_ID=$(id -u "$REAL_USER")
-
-    sudo -u "$REAL_USER" \
-    XDG_RUNTIME_DIR=/run/user/$USER_ID \
-    systemctl --user restart pipewire wireplumber pipewire-pulse || true
+systemctl enable undervolt.service
 
 fi
 
 
-echo "=== Updating GRUB ==="
+#############################################
+# GRUB WINDOWS + ISO
+#############################################
 
-pacman -S --needed --noconfirm --ask=4 \
-grub \
-os-prober
+echo "== Configuring GRUB =="
 
 
 sed -i \
-"s/^#\?GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=false/" \
+'s/^#\?GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=false/' \
 /etc/default/grub
 
 
-mkdir -p /boot/grub
+sed -i \
+'s/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=5/' \
+/etc/default/grub
 
 
-yes | grub-install \
+grub-install \
 --target=x86_64-efi \
 --efi-directory=/efi \
 --bootloader-id=ArchGRUB \
 --recheck
 
 
-grub-mkconfig -o /boot/grub/grub.cfg
 
-
-echo "=== Adding Arch ISO boot entry ==="
-
+#############################################
+# ARCH ISO ENTRY
+#############################################
 
 if ! grep -q "Arch Linux Installer ISO" /etc/grub.d/40_custom; then
 
-cat >> /etc/grub.d/40_custom <<'EOF'
+cat >> /etc/grub.d/40_custom <<EOF
 
 menuentry "Arch Linux Installer ISO" {
-    set iso_path="/archlinux-x86_64.iso"
-    loopback loop (hd0,gpt6)$iso_path
-    linux (loop)/arch/boot/x86_64/vmlinuz-linux img_dev=/dev/nvme0n1p6 img_loop=$iso_path
+    set iso_path="$ISO_PATH"
+    loopback loop ($ISO_DEVICE)\$iso_path
+    linux (loop)/arch/boot/x86_64/vmlinuz-linux img_dev=$ISO_DEVICE img_loop=\$iso_path
     initrd (loop)/arch/boot/x86_64/initramfs-linux.img
 }
 
@@ -198,21 +265,49 @@ chmod +x /etc/grub.d/40_custom
 
 grub-mkconfig -o /boot/grub/grub.cfg
 
-echo "=== Installing yay and AUR packages ==="
+
+#############################################
+# MAC TAHOE
+#############################################
+
+echo "== Installing MacTahoe =="
+
+cd "$WORKDIR"
 
 
-REAL_USER=$(logname 2>/dev/null || true)
+rm -rf MacTahoe-icon-theme
+
+git clone https://github.com/vinceliuice/MacTahoe-icon-theme
+
+cd MacTahoe-icon-theme
+
+./install.sh
 
 
-if [ -z "$REAL_USER" ]; then
-    echo "ERROR: Could not detect logged in user"
-    exit 1
-fi
+
+cd "$WORKDIR"
+
+
+rm -rf MacTahoe-kde
+
+git clone https://github.com/vinceliuice/MacTahoe-kde
+
+cd MacTahoe-kde
+
+./install.sh
+
+
+
+#############################################
+# YAY + AUR
+#############################################
+
+echo "== Installing yay =="
 
 
 sudo -u "$REAL_USER" bash <<EOF
 
-cd /tmp
+cd $WORKDIR
 
 rm -rf yay
 
@@ -222,8 +317,10 @@ cd yay
 
 makepkg -si --noconfirm --needed
 
+
 yay -S --noconfirm --needed \
-brave-bin visual-studio-code-bin
+brave-bin \
+visual-studio-code-bin
 
 
 flatpak install -y flathub com.stremio.Stremio
@@ -231,20 +328,52 @@ flatpak install -y flathub com.stremio.Stremio
 EOF
 
 
-echo "=== Cleaning temporary files ==="
 
-rm -rf /tmp/yay
+#############################################
+# CLEANUP
+#############################################
+
+echo "== Cleaning =="
+
+rm -rf "$WORKDIR"
 
 
-echo "=== Final system update ==="
 
-pacman -Syu --noconfirm --ask=4
+#############################################
+# UPDATE
+#############################################
+
+echo "== Final update =="
+
+pacman -Syu --noconfirm
 
 
-echo "=== Setup complete ==="
+
+#############################################
+# CHECKS
+#############################################
 
 echo ""
-echo "====================================="
-echo " Finished!"
-echo " Reboot recommended."
-echo "====================================="
+
+if uname -r | grep -q zen; then
+    echo "Kernel: linux-zen active"
+else
+    echo "WARNING: linux-zen is not active"
+fi
+
+
+echo ""
+echo "======================================"
+echo " Setup completed"
+echo ""
+echo " Intel NUC10 profile applied"
+echo " ZRAM: 8GB zstd"
+echo " PipeWire enabled"
+echo " Intel VAAPI enabled"
+echo " Undervolt enabled if supported"
+echo " Windows GRUB detection enabled"
+echo " Arch ISO GRUB entry enabled"
+echo " GRUB timeout: 5 seconds"
+echo ""
+echo "Reboot recommended"
+echo "======================================"
