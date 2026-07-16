@@ -1,8 +1,5 @@
 {
     "app_config": {
-        "audio_config": {
-            "audio": "pulseaudio"
-        },
         "bluetooth_config": {
             "enabled": true
         }
