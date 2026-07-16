@@ -14,11 +14,7 @@
         "removable": true,
         "uki": false
     },
-    "custom_commands": [
-        "pacman -S --noconfirm git base-devel sudo",
-        "su - methu -c 'cd /tmp && rm -rf yay && git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -si --noconfirm'",
-        "su - methu -c 'yay -S --noconfirm brave-bin stremio'"
-    ],
+    "custom_commands": [],
     "hostname": "archlinux",
     "kernels": [
         "linux"
