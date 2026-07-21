@@ -334,6 +334,49 @@ com.stremio.Stremio
 
 
 #################################################
+# INTEL VIDEO DRIVERS
+#################################################
+
+echo "=== Installing Intel video acceleration ==="
+
+# Remove legacy Intel Xorg driver (not needed on Wayland)
+pacman -R --noconfirm xf86-video-intel 2>/dev/null || true
+
+# Install modern Intel media drivers
+pacman -S --needed --noconfirm \
+intel-media-driver \
+libva-utils \
+intel-gpu-tools
+
+
+
+#################################################
+# STREMIO OPTIMIZATION
+#################################################
+
+echo "=== Optimizing Stremio for Wayland ==="
+
+# Native Wayland socket access
+flatpak override --system --socket=wayland com.stremio.Stremio
+
+# Force Qt to use Wayland natively
+flatpak override --system --env=QT_QPA_PLATFORM=wayland com.stremio.Stremio
+
+# Force Electron/Ozone to use Wayland
+flatpak override --system --env=ELECTRON_OZONE_PLATFORM_HINT=wayland com.stremio.Stremio
+
+# Direct GPU device access for hardware acceleration
+flatpak override --system --device=dri com.stremio.Stremio
+
+# Force correct Intel iHD driver for Comet Lake
+flatpak override --system --env=LIBVA_DRIVER_NAME=iHD com.stremio.Stremio
+
+echo "=== Stremio optimization complete ==="
+echo "Remember to enable 'Hardware-accelerated decoding' in Stremio settings"
+
+
+
+#################################################
 # CLEANUP
 #################################################
 
@@ -375,6 +418,8 @@ echo "- Stremio (Flatpak)"
 echo "- PipeWire"
 echo "- ZRAM 16GB"
 echo "- RAM flush every 30 minutes"
+echo "- Intel media drivers"
+echo "- Stremio Wayland optimized"
 echo ""
 echo "No yay installed"
 echo "No AUR packages used"
