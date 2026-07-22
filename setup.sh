@@ -295,7 +295,7 @@ if ! grep -q "Arch Linux Installer ISO" /etc/grub.d/40_custom; then
 
 cat >> /etc/grub.d/40_custom <<'EOF'
 
-menuentry "Arch Linux Installer ISO" {
+menuentry "Arch Linux Installer ISO" --id arch-installer {
 
     set iso_path="/archlinux-x86_64.iso"
 
