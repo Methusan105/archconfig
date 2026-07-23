@@ -296,16 +296,20 @@ if ! grep -q "Arch Linux Installer ISO" /etc/grub.d/40_custom; then
 cat >> /etc/grub.d/40_custom <<'EOF'
 
 menuentry "Arch Linux Installer ISO" --id arch-installer {
-
     set iso_path="/archlinux-x86_64.iso"
-
     loopback loop (hd0,gpt6)$iso_path
-
     linux (loop)/arch/boot/x86_64/vmlinuz-linux img_dev=/dev/nvme0n1p6 img_loop=$iso_path
-
     initrd (loop)/arch/boot/x86_64/initramfs-linux.img
 
 }
+
+menuentry "Windows Installer" {
+    insmod part_gpt
+    insmod fat
+    search --no-floppy --fs-uuid --set=root 02D4-2D14
+    chainloader /efi/boot/bootx64.efi
+}
+
 
 EOF
 
