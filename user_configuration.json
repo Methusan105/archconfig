@@ -55,7 +55,9 @@
         "aria2",
         "spotify-launcher",
         "ntfs-3g",
-        "fastfetch"
+        "fastfetch",
+        "code",
+        "kwalletmanager"
     ],
     "pacman_config": {
         "color": true,
