@@ -32,7 +32,7 @@ flatpak
 echo "=== Adding Flathub ==="
 
 flatpak remote-add --if-not-exists flathub \
-https://flathub.org/repo/flathub.flatpakrepo
+https://flathub.org
 
 
 
@@ -112,7 +112,7 @@ cd /tmp
 rm -rf MacTahoe-icon-theme
 
 git clone --depth=1 \
-https://github.com/vinceliuice/MacTahoe-icon-theme
+https://github.com
 
 
 cd MacTahoe-icon-theme
@@ -128,7 +128,7 @@ cd /tmp
 rm -rf MacTahoe-kde
 
 git clone --depth=1 \
-https://github.com/vinceliuice/MacTahoe-kde
+https://github.com
 
 
 cd MacTahoe-kde
@@ -233,6 +233,19 @@ if [ -n "$REAL_USER" ]; then
     wireplumber \
     || true
 
+fi
+
+
+
+#################################################
+# GRUB S3 DEEP SLEEP (FIX)
+#################################################
+
+echo "=== Configuring GRUB Deep Sleep ==="
+
+# Legger til parameteren hvis den ikke allerede eksisterer i fila
+if [ -f /etc/default/grub ] && ! grep -q "mem_sleep_default=deep" /etc/default/grub; then
+    sed -i 's/\(GRUB_CMDLINE_LINUX_DEFAULT=".*\)"/\1 mem_sleep_default=deep"/' /etc/default/grub
 fi
 
 
@@ -381,6 +394,42 @@ echo "Remember to enable 'Hardware-accelerated decoding' in Stremio settings"
 
 
 #################################################
+# BASHRC ALIASES
+#################################################
+
+echo "=== Adding Windows shortcuts to .bashrc ==="
+
+REAL_USER=$(logname 2>/dev/null || true)
+
+# Funksjon for å trygt legge til aliaser uten duplikater
+add_aliases() {
+    local target_rc="$1"
+    if [ -f "$target_rc" ]; then
+        if ! grep -q "# Windows shortcuts" "$target_rc"; then
+            cat >> "$target_rc" <<'EOF'
+
+# Windows shortcuts
+alias bootwin="sudo grub-reboot osprober-efi-BCD7-916D && reboot"
+alias cleaninstall="sudo grub-reboot arch-installer && reboot"
+alias mountwin="sudo mkdir -p /run/media/methu/Windows && sudo ntfs-3g /dev/nvme0n1p3 /run/media/methu/Windows"
+EOF
+        fi
+    fi
+}
+
+# Legg til for root
+add_aliases "/root/.bashrc"
+
+# Legg til for den faktiske brukeren din
+if [ -n "$REAL_USER" ] && [ "$REAL_USER" != "root" ]; then
+    USER_HOME=$(eval echo "~$REAL_USER")
+    add_aliases "$USER_HOME/.bashrc"
+    chown "$REAL_USER":"$REAL_USER" "$USER_HOME/.bashrc" || true
+fi
+
+
+
+#################################################
 # CLEANUP
 #################################################
 
@@ -424,6 +473,8 @@ echo "- ZRAM 16GB"
 echo "- RAM flush every 30 minutes"
 echo "- Intel media drivers"
 echo "- Stremio Wayland optimized"
+echo "- Fixed Intel S3 Deep Sleep"
+echo "- Custom Windows shortcuts in .bashrc"
 echo ""
 echo "No yay installed"
 echo "No AUR packages used"
