@@ -345,7 +345,6 @@ echo "=== Installing Flatpak apps ==="
 
 flatpak install --noninteractive flathub \
 com.brave.Browser \
-com.visualstudio.code \
 com.stremio.Stremio
 
 
