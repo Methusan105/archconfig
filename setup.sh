@@ -24,6 +24,61 @@ python \
 python-pip \
 flatpak
 
+#################################################
+# YAY
+#################################################
+
+echo "=== Installing yay ==="
+
+cd /tmp
+rm -rf yay
+
+git clone https://aur.archlinux.org/yay.git
+cd yay
+
+REAL_USER=$(logname 2>/dev/null || echo "$SUDO_USER")
+
+chown -R "$REAL_USER":"$REAL_USER" .
+
+sudo -u "$REAL_USER" makepkg -si --noconfirm
+
+cd /tmp
+rm -rf yay
+
+#################################################
+# MYSTIQ
+#################################################
+
+echo "=== Installing MystiQ ==="
+
+yay -S --noconfirm mystiq
+
+#################################################
+# SPOTIFY + SPOTX
+#################################################
+
+echo "=== Downloading Spotify ==="
+
+REAL_USER=$(logname 2>/dev/null || echo "$SUDO_USER")
+USER_HOME=$(eval echo "~$REAL_USER")
+
+# Start spotify-launcher as the real user
+sudo -u "$REAL_USER" spotify-launcher >/dev/null 2>&1 &
+
+echo "Waiting for Spotify to finish downloading..."
+
+# Wait up to 5 minutes
+for i in {1..300}; do
+    if [ -x "$USER_HOME/.local/share/spotify-launcher/install/usr/share/spotify/spotify" ]; then
+        echo "Spotify installed."
+        break
+    fi
+    sleep 1
+done
+
+echo "=== Installing SpotX ==="
+
+sudo -u "$REAL_USER" bash <(curl -sSL https://spotx-official.github.io/run.sh)
 
 #################################################
 # FLATHUB
@@ -310,8 +365,8 @@ cat >> /etc/grub.d/40_custom <<'EOF'
 
 menuentry "Arch Linux Installer ISO" --id arch-installer {
     set iso_path="/archlinux-x86_64.iso"
-    loopback loop (hd0,gpt6)$iso_path
-    linux (loop)/arch/boot/x86_64/vmlinuz-linux img_dev=/dev/nvme0n1p6 img_loop=$iso_path
+    loopback loop (hd0,gpt7)$iso_path
+    linux (loop)/arch/boot/x86_64/vmlinuz-linux img_dev=/dev/nvme0n1p7 img_loop=$iso_path
     initrd (loop)/arch/boot/x86_64/initramfs-linux.img
 
 }
@@ -462,20 +517,25 @@ stty sane
 echo ""
 echo "====================================="
 echo " Setup complete"
+echo "====================================="
 echo ""
 echo "Installed:"
 echo "- Brave (Flatpak)"
-echo "- VS Code (Flatpak)"
 echo "- Stremio (Flatpak)"
-echo "- PipeWire"
-echo "- ZRAM 16GB"
-echo "- RAM flush every 30 minutes"
+echo "- Spotify Launcher (pacman)"
+echo "- SpotX patch applied"
+echo "- yay (AUR helper)"
+echo "- MystiQ (AUR)"
+echo "- PipeWire + WirePlumber"
+echo "- ZRAM 16GB (zstd)"
+echo "- RAM cache flush every 30 minutes"
 echo "- Intel media drivers"
-echo "- Stremio Wayland optimized"
-echo "- Fixed Intel S3 Deep Sleep"
-echo "- Custom Windows shortcuts in .bashrc"
+echo "- Stremio Wayland optimization"
+echo "- GRUB deep sleep fix (mem_sleep_default=deep)"
+echo "- Windows shortcuts added to .bashrc"
 echo ""
-echo "No yay installed"
-echo "No AUR packages used"
+echo "AUR support enabled (yay)"
+echo "System fully updated"
+echo ""
 echo "Reboot recommended"
 echo "====================================="
