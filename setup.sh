@@ -9,6 +9,10 @@ export GIT_TERMINAL_PROMPT=0
 export PIP_BREAK_SYSTEM_PACKAGES=1
 
 
+#################################################
+# BASE PACKAGES
+#################################################
+
 echo "=== Installing base packages ==="
 
 pacman -S --needed --noconfirm \
@@ -19,29 +23,44 @@ python \
 python-pip \
 flatpak
 
+
+
+#################################################
+# USER DETECTION
+#################################################
+
+REAL_USER="${SUDO_USER:-$(logname)}"
+USER_HOME=$(eval echo "~$REAL_USER")
+
+echo "Running user installs as: $REAL_USER"
+
+
+
 #################################################
 # YAY
 #################################################
 
 echo "=== Installing yay ==="
 
-REAL_USER=$(logname 2>/dev/null || echo "$SUDO_USER")
-USER_HOME=$(eval echo "~$REAL_USER")
-
 cd /tmp
+
 rm -rf yay
 
 git clone https://aur.archlinux.org/yay.git
 
 chown -R "$REAL_USER":"$REAL_USER" /tmp/yay
 
+
 sudo -u "$REAL_USER" bash -c '
 cd /tmp/yay
 makepkg -si --noconfirm
 '
 
+
 cd /tmp
 rm -rf yay
+
+
 
 #################################################
 # MYSTIQ
@@ -51,21 +70,31 @@ echo "=== Installing MystiQ ==="
 
 sudo -u "$REAL_USER" yay -S --noconfirm mystiq
 
+
+
 #################################################
 # SPOTIFY + SPOTX
 #################################################
 
 echo "=== Downloading Spotify ==="
 
+# spotify-launcher is already installed from archinstall
 sudo -u "$REAL_USER" spotify-launcher >/dev/null 2>&1 &
+
 
 echo "Waiting for Spotify installation..."
 
+
 for i in {1..300}; do
 
-    if [ -x "$USER_HOME/.local/share/spotify-launcher/install/usr/share/spotify/spotify" ]; then
+    if find "$USER_HOME/.local/share/spotify-launcher" \
+        -name spotify \
+        -type f \
+        -executable 2>/dev/null | grep -q .; then
+
         echo "Spotify installed."
         break
+
     fi
 
     sleep 1
@@ -73,16 +102,24 @@ for i in {1..300}; do
 done
 
 
-if [ ! -x "$USER_HOME/.local/share/spotify-launcher/install/usr/share/spotify/spotify" ]; then
+
+if ! find "$USER_HOME/.local/share/spotify-launcher" \
+    -name spotify \
+    -type f \
+    -executable 2>/dev/null | grep -q .; then
+
     echo "ERROR: Spotify installation timed out"
     exit 1
+
 fi
+
 
 
 echo "=== Installing SpotX ==="
 
+
 sudo -u "$REAL_USER" bash -c \
-'bash <(curl -sSL https://spotx-official.github.io/run.sh)'
+"bash <(curl -sSL https://spotx-official.github.io/run.sh)"
 
 #################################################
 # FLATHUB
@@ -170,15 +207,18 @@ cd /tmp
 
 rm -rf MacTahoe-icon-theme
 
+
+# Replace this with the real MacTahoe icon repository
 git clone --depth=1 \
-https://github.com
+https://github.com/vinceliuice/MacTahoe-icon-theme.git \
+MacTahoe-icon-theme
 
 
 cd MacTahoe-icon-theme
 
-./install.sh
+./install.sh || true
 
-stty sane
+stty sane 2>/dev/null || true
 
 
 cd /tmp
@@ -186,15 +226,18 @@ cd /tmp
 
 rm -rf MacTahoe-kde
 
+
+# Replace this with the real MacTahoe KDE repository
 git clone --depth=1 \
-https://github.com
+https://github.com/vinceliuice/MacTahoe-kde.git \
+MacTahoe-kde
 
 
 cd MacTahoe-kde
 
-./install.sh
+./install.sh || true
 
-stty sane
+stty sane 2>/dev/null || true
 
 
 cd /tmp
@@ -276,9 +319,6 @@ systemctl enable --now bluetooth.service
 echo "=== Restarting PipeWire ==="
 
 
-REAL_USER=$(logname 2>/dev/null || true)
-
-
 if [ -n "$REAL_USER" ]; then
 
     USER_ID=$(id -u "$REAL_USER")
@@ -297,14 +337,19 @@ fi
 
 
 #################################################
-# GRUB S3 DEEP SLEEP (FIX)
+# GRUB S3 DEEP SLEEP FIX
 #################################################
 
 echo "=== Configuring GRUB Deep Sleep ==="
 
-# Legger til parameteren hvis den ikke allerede eksisterer i fila
-if [ -f /etc/default/grub ] && ! grep -q "mem_sleep_default=deep" /etc/default/grub; then
-    sed -i 's/\(GRUB_CMDLINE_LINUX_DEFAULT=".*\)"/\1 mem_sleep_default=deep"/' /etc/default/grub
+
+if [ -f /etc/default/grub ] && \
+! grep -q "mem_sleep_default=deep" /etc/default/grub; then
+
+    sed -i \
+    's/\(GRUB_CMDLINE_LINUX_DEFAULT=".*\)"/\1 mem_sleep_default=deep"/' \
+    /etc/default/grub
+
 fi
 
 
@@ -353,8 +398,6 @@ grub-install \
 
 grub-mkconfig -o /boot/grub/grub.cfg
 
-
-
 #################################################
 # ARCH ISO GRUB ENTRY
 #################################################
@@ -372,8 +415,8 @@ menuentry "Arch Linux Installer ISO" --id arch-installer {
     loopback loop (hd0,gpt7)$iso_path
     linux (loop)/arch/boot/x86_64/vmlinuz-linux img_dev=/dev/nvme0n1p7 img_loop=$iso_path
     initrd (loop)/arch/boot/x86_64/initramfs-linux.img
-
 }
+
 
 menuentry "Windows Installer" {
     insmod part_gpt
@@ -381,7 +424,6 @@ menuentry "Windows Installer" {
     search --no-floppy --fs-uuid --set=root 02D4-2D14
     chainloader /efi/boot/bootx64.efi
 }
-
 
 EOF
 
@@ -414,10 +456,11 @@ com.stremio.Stremio
 
 echo "=== Installing Intel video acceleration ==="
 
-# Remove legacy Intel Xorg driver (not needed on Wayland)
+
+# Remove legacy Intel Xorg driver
 pacman -R --noconfirm xf86-video-intel 2>/dev/null || true
 
-# Install modern Intel media drivers
+
 pacman -S --needed --noconfirm \
 intel-media-driver \
 libva-utils \
@@ -431,23 +474,39 @@ intel-gpu-tools
 
 echo "=== Optimizing Stremio for Wayland ==="
 
+
 # Native Wayland socket access
-flatpak override --system --socket=wayland com.stremio.Stremio
+flatpak override --system \
+--socket=wayland \
+com.stremio.Stremio
 
-# Force Qt to use Wayland natively
-flatpak override --system --env=QT_QPA_PLATFORM=wayland com.stremio.Stremio
 
-# Force Electron/Ozone to use Wayland
-flatpak override --system --env=ELECTRON_OZONE_PLATFORM_HINT=wayland com.stremio.Stremio
+# Force Qt Wayland
+flatpak override --system \
+--env=QT_QPA_PLATFORM=wayland \
+com.stremio.Stremio
 
-# Direct GPU device access for hardware acceleration
-flatpak override --system --device=dri com.stremio.Stremio
 
-# Force correct Intel iHD driver for Comet Lake
-flatpak override --system --env=LIBVA_DRIVER_NAME=iHD com.stremio.Stremio
+# Electron Wayland
+flatpak override --system \
+--env=ELECTRON_OZONE_PLATFORM_HINT=wayland \
+com.stremio.Stremio
+
+
+# GPU access
+flatpak override --system \
+--device=dri \
+com.stremio.Stremio
+
+
+# Intel iHD driver
+flatpak override --system \
+--env=LIBVA_DRIVER_NAME=iHD \
+com.stremio.Stremio
+
 
 echo "=== Stremio optimization complete ==="
-echo "Remember to enable 'Hardware-accelerated decoding' in Stremio settings"
+echo "Enable Hardware Acceleration in Stremio settings"
 
 
 
@@ -457,32 +516,55 @@ echo "Remember to enable 'Hardware-accelerated decoding' in Stremio settings"
 
 echo "=== Adding Windows shortcuts to .bashrc ==="
 
-REAL_USER=$(logname 2>/dev/null || true)
 
-# Funksjon for å trygt legge til aliaser uten duplikater
+
 add_aliases() {
+
     local target_rc="$1"
+
+
     if [ -f "$target_rc" ]; then
+
+
         if ! grep -q "# Windows shortcuts" "$target_rc"; then
-            cat >> "$target_rc" <<'EOF'
+
+
+cat >> "$target_rc" <<'EOF'
 
 # Windows shortcuts
 alias bootwin="sudo grub-reboot osprober-efi-BCD7-916D && reboot"
 alias cleaninstall="sudo grub-reboot arch-installer && reboot"
 alias mountwin="sudo mkdir -p /run/media/methu/Windows && sudo ntfs-3g /dev/nvme0n1p3 /run/media/methu/Windows"
+
 EOF
+
+
         fi
+
     fi
+
 }
 
-# Legg til for root
+
+
+# Root aliases
 add_aliases "/root/.bashrc"
 
-# Legg til for den faktiske brukeren din
+
+
+# User aliases
 if [ -n "$REAL_USER" ] && [ "$REAL_USER" != "root" ]; then
+
+
     USER_HOME=$(eval echo "~$REAL_USER")
+
+
     add_aliases "$USER_HOME/.bashrc"
-    chown "$REAL_USER":"$REAL_USER" "$USER_HOME/.bashrc" || true
+
+
+    chown "$REAL_USER":"$REAL_USER" \
+    "$USER_HOME/.bashrc" || true
+
 fi
 
 
@@ -500,6 +582,7 @@ rm -rf /tmp/MacTahoe-kde
 
 pacman -Sc --noconfirm || true
 
+
 flatpak uninstall --unused -y || true
 
 
@@ -515,8 +598,13 @@ pacman -Syu --noconfirm
 
 
 
-stty sane
+stty sane 2>/dev/null || true
 
+
+
+#################################################
+# COMPLETE
+#################################################
 
 echo ""
 echo "====================================="
@@ -526,20 +614,20 @@ echo ""
 echo "Installed:"
 echo "- Brave (Flatpak)"
 echo "- Stremio (Flatpak)"
-echo "- Spotify Launcher (pacman)"
+echo "- Spotify Launcher (Arch)"
 echo "- SpotX patch applied"
 echo "- yay (AUR helper)"
 echo "- MystiQ (AUR)"
 echo "- PipeWire + WirePlumber"
 echo "- ZRAM 16GB (zstd)"
-echo "- RAM cache flush every 30 minutes"
+echo "- RAM flush every 30 minutes"
 echo "- Intel media drivers"
-echo "- Stremio Wayland optimization"
-echo "- GRUB deep sleep fix (mem_sleep_default=deep)"
-echo "- Windows shortcuts added to .bashrc"
+echo "- Stremio Wayland optimized"
+echo "- GRUB deep sleep fix"
+echo "- Windows shortcuts added"
 echo ""
-echo "AUR support enabled (yay)"
-echo "System fully updated"
+echo "AUR support enabled"
+echo "System updated"
 echo ""
 echo "Reboot recommended"
 echo "====================================="
