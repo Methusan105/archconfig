@@ -30,17 +30,20 @@ flatpak
 
 echo "=== Installing yay ==="
 
+REAL_USER=$(logname 2>/dev/null || echo "$SUDO_USER")
+USER_HOME=$(eval echo "~$REAL_USER")
+
 cd /tmp
 rm -rf yay
 
 git clone https://aur.archlinux.org/yay.git
-cd yay
 
-REAL_USER=$(logname 2>/dev/null || echo "$SUDO_USER")
+chown -R "$REAL_USER":"$REAL_USER" /tmp/yay
 
-chown -R "$REAL_USER":"$REAL_USER" .
-
-sudo -u "$REAL_USER" makepkg -si --noconfirm
+sudo -u "$REAL_USER" bash -c '
+cd /tmp/yay
+makepkg -si --noconfirm
+'
 
 cd /tmp
 rm -rf yay
@@ -51,7 +54,7 @@ rm -rf yay
 
 echo "=== Installing MystiQ ==="
 
-yay -S --noconfirm mystiq
+sudo -u "$REAL_USER" yay -S --noconfirm mystiq
 
 #################################################
 # SPOTIFY + SPOTX
@@ -59,26 +62,32 @@ yay -S --noconfirm mystiq
 
 echo "=== Downloading Spotify ==="
 
-REAL_USER=$(logname 2>/dev/null || echo "$SUDO_USER")
-USER_HOME=$(eval echo "~$REAL_USER")
-
-# Start spotify-launcher as the real user
 sudo -u "$REAL_USER" spotify-launcher >/dev/null 2>&1 &
 
-echo "Waiting for Spotify to finish downloading..."
+echo "Waiting for Spotify installation..."
 
-# Wait up to 5 minutes
 for i in {1..300}; do
+
     if [ -x "$USER_HOME/.local/share/spotify-launcher/install/usr/share/spotify/spotify" ]; then
         echo "Spotify installed."
         break
     fi
+
     sleep 1
+
 done
+
+
+if [ ! -x "$USER_HOME/.local/share/spotify-launcher/install/usr/share/spotify/spotify" ]; then
+    echo "ERROR: Spotify installation timed out"
+    exit 1
+fi
+
 
 echo "=== Installing SpotX ==="
 
-sudo -u "$REAL_USER" bash <(curl -sSL https://spotx-official.github.io/run.sh)
+sudo -u "$REAL_USER" bash -c \
+'bash <(curl -sSL https://spotx-official.github.io/run.sh)'
 
 #################################################
 # FLATHUB
