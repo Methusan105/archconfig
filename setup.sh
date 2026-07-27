@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
 
-# Fix curl | bash stdin problems
-if [ ! -t 0 ] && [ -e /dev/tty ]; then
-    exec </dev/tty
-fi
-
 set -Eeuo pipefail
 
 trap 'echo ""; echo "ERROR on line $LINENO"; stty sane 2>/dev/null || true; exit 1' ERR
