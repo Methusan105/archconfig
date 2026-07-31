@@ -14,7 +14,7 @@
     "custom_commands": [],
     "hostname": "archlinux",
     "kernels": [
-        "linux"
+        "linux-zen"
     ],
     "locale_config": {
         "console_font": "default8x16",
@@ -57,7 +57,8 @@
         "ntfs-3g",
         "fastfetch",
         "code",
-        "kwalletmanager"
+        "kwalletmanager",
+        "falkon"
     ],
     "pacman_config": {
         "color": true,
