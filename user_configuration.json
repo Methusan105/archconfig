@@ -58,7 +58,8 @@
         "fastfetch",
         "code",
         "kwalletmanager",
-        "falkon"
+        "falkon",
+        "krusader"
     ],
     "pacman_config": {
         "color": true,
