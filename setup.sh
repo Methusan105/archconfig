@@ -68,7 +68,7 @@ rm -rf yay
 
 echo "=== Installing MystiQ ==="
 
-sudo -u "$REAL_USER" yay -S --noconfirm mystiq
+sudo -u "$REAL_USER" yay -S --noconfirm mystiq brave-bin
 
 
 
@@ -436,20 +436,6 @@ chmod +x /etc/grub.d/40_custom
 grub-mkconfig -o /boot/grub/grub.cfg
 
 
-
-#################################################
-# FLATPAK APPS
-#################################################
-
-echo "=== Installing Flatpak apps ==="
-
-
-flatpak install --noninteractive flathub \
-com.brave.Browser \
-com.stremio.Stremio
-
-
-
 #################################################
 # INTEL VIDEO DRIVERS
 #################################################
@@ -466,47 +452,39 @@ intel-media-driver \
 libva-utils \
 intel-gpu-tools
 
-
-
 #################################################
-# STREMIO OPTIMIZATION
+# STREMIO ARCH PACKAGE
 #################################################
 
-echo "=== Optimizing Stremio for Wayland ==="
+echo "=== Installing Stremio Arch package ==="
+
+cd /tmp
+
+rm -rf Stremio.Arch.Linux Stremio.Arch.Linux.zip
+
+curl -L \
+"https://github.com/Methusan105/archconfig/releases/download/SALP/Stremio.Arch.Linux.zip" \
+-o Stremio.Arch.Linux.zip
 
 
-# Native Wayland socket access
-flatpak override --system \
---socket=wayland \
-com.stremio.Stremio
+unzip -q Stremio.Arch.Linux.zip \
+-d Stremio.Arch.Linux
 
 
-# Force Qt Wayland
-flatpak override --system \
---env=QT_QPA_PLATFORM=wayland \
-com.stremio.Stremio
+cd Stremio.Arch.Linux
 
 
-# Electron Wayland
-flatpak override --system \
---env=ELECTRON_OZONE_PLATFORM_HINT=wayland \
-com.stremio.Stremio
+echo "=== Installing Stremio packages ==="
+
+pacman -U --noconfirm *.pkg.tar.zst
 
 
-# GPU access
-flatpak override --system \
---device=dri \
-com.stremio.Stremio
+cd /tmp
+
+rm -rf Stremio.Arch.Linux Stremio.Arch.Linux.zip
 
 
-# Intel iHD driver
-flatpak override --system \
---env=LIBVA_DRIVER_NAME=iHD \
-com.stremio.Stremio
-
-
-echo "=== Stremio optimization complete ==="
-echo "Enable Hardware Acceleration in Stremio settings"
+echo "=== Stremio Arch package installed ==="
 
 
 
@@ -622,7 +600,7 @@ echo "- PipeWire + WirePlumber"
 echo "- ZRAM 16GB (zstd)"
 echo "- RAM flush every 30 minutes"
 echo "- Intel media drivers"
-echo "- Stremio Wayland optimized"
+echo "- Stremio Arch Package"
 echo "- GRUB deep sleep fix"
 echo "- Windows shortcuts added"
 echo ""
