@@ -68,7 +68,7 @@ rm -rf yay
 
 echo "=== Installing MystiQ ==="
 
-sudo -u "$REAL_USER" yay -S --noconfirm mystiq brave-bin warp-cli
+sudo -u "$REAL_USER" yay -S --noconfirm brave-bin warp-cli spotify
 
 
 
