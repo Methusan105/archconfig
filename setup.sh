@@ -68,7 +68,7 @@ rm -rf yay
 
 echo "=== Installing MystiQ ==="
 
-sudo -u "$REAL_USER" yay -S --noconfirm mystiq brave-bin
+sudo -u "$REAL_USER" yay -S --noconfirm mystiq brave-bin warp-cli
 
 
 
@@ -486,7 +486,21 @@ rm -rf Stremio.Arch.Linux Stremio.Arch.Linux.zip
 
 echo "=== Stremio Arch package installed ==="
 
+#################################################
+# JDOWNLOADER
+#################################################
 
+echo "=== Installing JDownloader ==="
+
+cd /tmp
+
+curl -L \
+"https://github.com/Methusan105/archconfig/releases/download/jd/JDownloader2Setup_unix_nojre.sh" \
+-o JDownloader2Setup_unix_nojre.sh
+
+chmod +x JDownloader2Setup_unix_nojre.sh
+
+sudo -u "$REAL_USER" ./JDownloader2Setup_unix_nojre.sh
 
 #################################################
 # BASHRC ALIASES
