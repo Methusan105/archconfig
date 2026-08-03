@@ -59,7 +59,13 @@
         "code",
         "kwalletmanager",
         "falkon",
-        "krusader"
+        "krusader",
+        "ffmpeg",
+        "libnotify",
+        "qt6-base",
+        "qt6-multimedia",
+        "sox",
+        "jre-openjdk"
     ],
     "pacman_config": {
         "color": true,
