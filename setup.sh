@@ -343,12 +343,16 @@ fi
 echo "=== Configuring GRUB Deep Sleep ==="
 
 
-if [ -f /etc/default/grub ] && \
-! grep -q "mem_sleep_default=deep" /etc/default/grub; then
+if [ -f /etc/default/grub ]; then
 
     sed -i \
-    's/\(GRUB_CMDLINE_LINUX_DEFAULT=".*\)"/\1 mem_sleep_default=deep"/' \
+    's|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT="systemd.show_status=true mem_sleep_default=deep acpi_osi=Linux pcie_aspm=off ignore_loglevel systemd.log_level=debug systemd.log_target=kmsg log_buf_len=16M devkmsg=on"|' \
     /etc/default/grub
+
+else
+
+    echo "ERROR: /etc/default/grub not found"
+    exit 1
 
 fi
 
