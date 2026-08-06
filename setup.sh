@@ -71,43 +71,6 @@ echo "=== Installing MystiQ ==="
 sudo -u "$REAL_USER" yay -S --noconfirm brave-bin warp-cli spotify
 
 
-
-#################################################
-# SPOTIFY + SPOTX
-#################################################
-echo "Waiting for Spotify installation..."
-
-
-for i in {1..300}; do
-
-    if find "$USER_HOME/.local/share/spotify-launcher" \
-        -name spotify \
-        -type f \
-        -executable 2>/dev/null | grep -q .; then
-
-        echo "Spotify installed."
-        break
-
-    fi
-
-    sleep 1
-
-done
-
-
-
-if ! find "$USER_HOME/.local/share/spotify-launcher" \
-    -name spotify \
-    -type f \
-    -executable 2>/dev/null | grep -q .; then
-
-    echo "ERROR: Spotify installation timed out"
-    exit 1
-
-fi
-
-
-
 echo "=== Installing SpotX ==="
 
 
