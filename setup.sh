@@ -423,7 +423,7 @@ cd /tmp
 rm -rf Stremio.Arch.Linux Stremio.Arch.Linux.zip
 
 curl -L \
-"https://github.com/Methusan105/archconfig/releases/download/SALP/Stremio.Arch.Linux.zip" \
+"https://github.com/Methusan105/archconfig/releases/download/PP/prebuilt.packages.zip" \
 -o Stremio.Arch.Linux.zip
 
 
@@ -445,22 +445,6 @@ rm -rf Stremio.Arch.Linux Stremio.Arch.Linux.zip
 
 
 echo "=== Stremio Arch package installed ==="
-
-#################################################
-# JDOWNLOADER
-#################################################
-
-echo "=== Installing JDownloader ==="
-
-cd /tmp
-
-curl -L \
-"https://github.com/Methusan105/archconfig/releases/download/jd/JDownloader2Setup_unix_nojre.sh" \
--o JDownloader2Setup_unix_nojre.sh
-
-chmod +x JDownloader2Setup_unix_nojre.sh
-
-sudo -u "$REAL_USER" ./JDownloader2Setup_unix_nojre.sh
 
 #################################################
 # BASHRC ALIASES
