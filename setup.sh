@@ -75,13 +75,6 @@ sudo -u "$REAL_USER" yay -S --noconfirm brave-bin warp-cli spotify
 #################################################
 # SPOTIFY + SPOTX
 #################################################
-
-echo "=== Downloading Spotify ==="
-
-# spotify-launcher is already installed from archinstall
-sudo -u "$REAL_USER" spotify-launcher >/dev/null 2>&1 &
-
-
 echo "Waiting for Spotify installation..."
 
 
