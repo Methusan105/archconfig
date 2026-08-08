@@ -64,7 +64,8 @@
         "qt6-base",
         "qt6-multimedia",
         "sox",
-        "jre-openjdk"
+        "jre-openjdk",
+        "kate"
     ],
     "pacman_config": {
         "color": true,
