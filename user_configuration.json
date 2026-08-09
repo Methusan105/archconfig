@@ -67,7 +67,8 @@
         "jre-openjdk",
         "kate",
         "cpupower",
-        "hdparm"
+        "hdparm",
+        "qalculate-gtk"
     ],
     "pacman_config": {
         "color": true,
