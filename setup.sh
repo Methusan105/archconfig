@@ -468,9 +468,15 @@ add_aliases() {
 cat >> "$target_rc" <<'EOF'
 
 # Windows shortcuts
-alias bootwin="sudo grub-reboot osprober-efi-BCD7-916D && reboot"
+alias bootwin="sudo grub-reboot 'Windows Boot Manager (på /dev/nvme0n1p3)' && reboot"
 alias cleaninstall="sudo grub-reboot arch-installer && reboot"
-alias mountwin="sudo mkdir -p /run/media/methu/Windows && sudo ntfs-3g /dev/nvme0n1p3 /run/media/methu/Windows"
+alias mountwin="sudo mkdir -p /run/media/methu/Windows && sudo ntfs-3g /dev/nvme0n1p2 /run/media/methu/Windows"
+alias enable_warp-svc="sudo systemctl unmask warp-svc && sudo systemctl start warp-svc"
+alias disable_warp-svc="sudo systemctl stop warp-svc && sudo systemctl mask warp-svc"
+alias cpu4off='for cpu in {4..7}; do echo 0 | sudo tee /sys/devices/system/cpu/cpu$cpu/online >/dev/null; done'
+alias cpu4on='for cpu in {4..7}; do echo 1 | sudo tee /sys/devices/system/cpu/cpu$cpu/online >/dev/null; done'
+alias cpu-cool='sudo cpupower frequency-set -u 800MHz'
+alias cpu-normal='sudo cpupower frequency-set -u 100%'
 
 EOF
 
