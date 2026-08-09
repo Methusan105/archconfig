@@ -65,7 +65,9 @@
         "qt6-multimedia",
         "sox",
         "jre-openjdk",
-        "kate"
+        "kate",
+        "cpupower",
+        "hdparm"
     ],
     "pacman_config": {
         "color": true,
