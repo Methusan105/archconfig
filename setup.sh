@@ -476,7 +476,7 @@ alias disable_warp-svc="sudo systemctl stop warp-svc && sudo systemctl mask warp
 alias disablecores='for cpu in {4..7}; do echo 0 | sudo tee /sys/devices/system/cpu/cpu$cpu/online >/dev/null; done'
 alias enablecores='for cpu in {4..7}; do echo 1 | sudo tee /sys/devices/system/cpu/cpu$cpu/online >/dev/null; done'
 alias cpu-cool='sudo cpupower frequency-set -u 800MHz'
-alias cpu-normal='sudo cpupower frequency-set -u 100%'
+alias cpu-normal='sudo cpupower frequency-set -u 1600MHz'
 
 EOF
 
