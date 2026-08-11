@@ -68,7 +68,7 @@ rm -rf yay
 
 echo "=== Installing MystiQ ==="
 
-sudo -u "$REAL_USER" yay -S --noconfirm brave-origin-bin warp-cli spotify gotohp-bin
+sudo -u "$REAL_USER" yay -S --noconfirm brave-origin-bin warp-cli spotify gotohp-bin galaxybudsclient-bin
 
 
 echo "=== Installing SpotX ==="
