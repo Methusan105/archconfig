@@ -23,7 +23,10 @@
         "sys_lang": "nb_NO.UTF-8"
     },
     "mirror_config": {
-        "custom_repositories": [],
+        "custom_repositories": [{
+        "name": "myrepo",
+        "url": "https://github.com/Methusan105/archconfig/releases/download/PP"
+    }],
         "custom_servers": [],
         "mirror_regions": {
             "Norway": [
