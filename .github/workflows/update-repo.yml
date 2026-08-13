@@ -1,0 +1,79 @@
+name: Update MethuRepo
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-repo:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl jq
+
+      - name: Install GitHub CLI
+        run: |
+          sudo apt-get install -y gh
+
+      - name: Download all PKGZST assets from mr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p repo
+
+          gh release download mr \
+            --repo Methusan105/archconfig \
+            --dir repo \
+            --pattern "*.pkg.tar.zst"
+
+          echo "Downloaded packages:"
+          ls -lh repo
+
+      - name: Install Arch container
+        run: |
+          docker pull archlinux:latest
+
+      - name: Build MethuRepo database
+        run: |
+          docker run --rm \
+            -v "$PWD/repo:/repo" \
+            archlinux:latest \
+            bash -c '
+              set -e
+
+              cd /repo
+
+              pacman -Sy --noconfirm pacman-contrib
+
+              rm -f methurepos.db \
+                    methurepos.db.tar.gz \
+                    methurepos.files \
+                    methurepos.files.tar.gz
+
+              repo-add methurepos.db.tar.gz ./*.pkg.tar.zst
+
+              cp methurepos.db.tar.gz methurepos.db
+              cp methurepos.files.tar.gz methurepos.files
+
+              echo "Created:"
+              ls -lh methurepos*
+            '
+
+      - name: Update mr release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload mr \
+            repo/methurepos.db \
+            repo/methurepos.db.tar.gz \
+            repo/methurepos.files \
+            repo/methurepos.files.tar.gz \
+            --repo Methusan105/archconfig \
+            --clobber
+
+          echo "MethuRepo updated successfully!"
