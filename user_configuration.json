@@ -24,7 +24,7 @@
     },
     "mirror_config": {
         "custom_repositories": [{
-        "name": "myrepo",
+        "name": "methurepos",
         "url": "https://github.com/Methusan105/archconfig/releases/download/PP"
     }],
         "custom_servers": [],
