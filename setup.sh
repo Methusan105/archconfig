@@ -8,6 +8,19 @@ export MAKEFLAGS="-j$(nproc)"
 export GIT_TERMINAL_PROMPT=0
 export PIP_BREAK_SYSTEM_PACKAGES=1
 
+#################################################
+# METHUREPOS
+#################################################
+
+echo "=== Adding MethuRepo ==="
+
+sed -i '/^\[methurepos\]/,/^Server = /d' /etc/pacman.conf
+
+printf '\n[methurepos]\nSigLevel = Optional\nServer = https://github.com/Methusan105/archconfig/releases/download/mr\n' \
+| tee -a /etc/pacman.conf >/dev/null
+
+pacman -Sy
+
 
 #################################################
 # BASE PACKAGES
