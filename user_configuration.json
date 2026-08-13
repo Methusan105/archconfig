@@ -71,7 +71,8 @@
         "kate",
         "cpupower",
         "hdparm",
-        "qalculate-gtk"
+        "qalculate-gtk",
+        "stremio"
     ],
     "pacman_config": {
         "color": true,
