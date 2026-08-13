@@ -45,23 +45,22 @@ jobs:
             archlinux:latest \
             bash -c '
               set -e
-
+      
               cd /repo
-
+      
               pacman -Sy --noconfirm pacman-contrib
-
-              rm -f methurepos.db \
-                    methurepos.db.tar.gz \
-                    methurepos.files \
-                    methurepos.files.tar.gz
-
+      
+              # Remove any old repository database files
+              rm -f methurepos.db
+              rm -f methurepos.db.tar.gz
+              rm -f methurepos.files
+              rm -f methurepos.files.tar.gz
+      
+              # Create a completely new repository database
               repo-add methurepos.db.tar.gz ./*.pkg.tar.zst
-
-              cp methurepos.db.tar.gz methurepos.db
-              cp methurepos.files.tar.gz methurepos.files
-
-              echo "Created:"
-              ls -lh methurepos*
+      
+              echo "Repository database created:"
+              ls -lah methurepos*
             '
 
       - name: Update mr release
