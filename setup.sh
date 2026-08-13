@@ -413,40 +413,6 @@ libva-utils \
 intel-gpu-tools
 
 #################################################
-# STREMIO ARCH PACKAGE
-#################################################
-
-echo "=== Installing Stremio Arch package ==="
-
-cd /tmp
-
-rm -rf Stremio.Arch.Linux Stremio.Arch.Linux.zip
-
-curl -L \
-"https://github.com/Methusan105/archconfig/releases/download/PP/prebuilt.packages.zip" \
--o Stremio.Arch.Linux.zip
-
-
-unzip -q Stremio.Arch.Linux.zip \
--d Stremio.Arch.Linux
-
-
-cd Stremio.Arch.Linux
-
-
-echo "=== Installing Stremio packages ==="
-
-pacman -U --noconfirm *.pkg.tar.zst
-
-
-cd /tmp
-
-rm -rf Stremio.Arch.Linux Stremio.Arch.Linux.zip
-
-
-echo "=== Stremio Arch package installed ==="
-
-#################################################
 # BASHRC ALIASES
 #################################################
 
