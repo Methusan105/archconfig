@@ -11,62 +11,251 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Install tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y curl jq
 
-      - name: Install GitHub CLI
-        run: |
-          sudo apt-get install -y gh
+      #################################################
+      # CHECKOUT
+      #################################################
 
-      - name: Download all PKGZST assets from mr
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      #################################################
+      # DOWNLOAD EXISTING REPO DATABASE
+      #################################################
+
+      - name: Download existing repository database
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -Eeuo pipefail
+
           mkdir -p repo
+
+          echo "=== Downloading existing MethuRepo database ==="
 
           gh release download mr \
             --repo Methusan105/archconfig \
+            --pattern 'methurepos.db.tar.gz' \
             --dir repo \
-            --pattern "*.pkg.tar.zst"
+            --clobber || true
 
-          echo "Downloaded packages:"
-          ls -lh repo
+          gh release download mr \
+            --repo Methusan105/archconfig \
+            --pattern 'methurepos.files.tar.gz' \
+            --dir repo \
+            --clobber || true
 
-      - name: Install Arch container
+          ls -lah repo
+
+
+      #################################################
+      # DOWNLOAD PACKAGE ASSETS
+      #################################################
+
+      - name: Download packages from release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          docker pull archlinux:latest
+          set -Eeuo pipefail
 
-      - name: Build MethuRepo database
+          mkdir -p repo
+
+          echo "=== Getting package list from GitHub Release ==="
+
+          gh release view mr \
+            --repo Methusan105/archconfig \
+            --json assets \
+            --jq '.assets[].name' \
+            > release-assets.txt
+
+          echo ""
+          echo "Release assets:"
+          cat release-assets.txt
+          echo ""
+
+          echo "=== Checking existing repository database ==="
+
+          if [ -f repo/methurepos.db.tar.gz ]; then
+              tar -xOf repo/methurepos.db.tar.gz \
+                  --wildcards '*/desc' 2>/dev/null \
+                  | grep '^%FILENAME%' -A1 \
+                  | grep '\.pkg\.tar\.zst$' \
+                  | sort -u \
+                  > existing-packages.txt || true
+          else
+              touch existing-packages.txt
+          fi
+
+          echo ""
+          echo "Packages already in database:"
+          cat existing-packages.txt || true
+          echo ""
+
+          echo "=== Downloading only new packages ==="
+
+          while IFS= read -r package; do
+
+              [ -z "$package" ] && continue
+
+              # Ignore repository database files
+              case "$package" in
+                  *.db|*.db.tar.gz|*.files|*.files.tar.gz)
+                      continue
+                      ;;
+              esac
+
+              # Only process Arch packages
+              case "$package" in
+                  *.pkg.tar.zst)
+                      ;;
+                  *)
+                      continue
+                      ;;
+              esac
+
+              if grep -Fxq "$package" existing-packages.txt; then
+                  echo "SKIP: $package"
+                  continue
+              fi
+
+              echo "NEW: $package"
+
+              gh release download mr \
+                  --repo Methusan105/archconfig \
+                  --pattern "$package" \
+                  --dir repo \
+                  --clobber
+
+          done < release-assets.txt
+
+          echo ""
+          echo "=== Repository directory ==="
+          ls -lah repo
+
+
+      #################################################
+      # UPDATE DATABASE
+      #################################################
+
+      - name: Update repository database
         run: |
+          set -Eeuo pipefail
+
           docker run --rm \
             -v "$PWD/repo:/repo" \
             archlinux:latest \
             bash -c '
-              set -e
-      
+              set -Eeuo pipefail
+
               cd /repo
-      
+
               pacman -Sy --noconfirm pacman-contrib
-      
-              # Remove any old repository database files
-              rm -f methurepos.db
-              rm -f methurepos.db.tar.gz
-              rm -f methurepos.files
-              rm -f methurepos.files.tar.gz
-      
-              # Create a completely new repository database
-              repo-add methurepos.db.tar.gz ./*.pkg.tar.zst
-      
-              echo "Repository database created:"
+
+              echo "=== Package files ==="
+
+              ls -1 *.pkg.tar.zst 2>/dev/null || true
+
+              echo ""
+              echo "=== Updating repository database ==="
+
+              # If no database exists, create one from all packages
+              if [ ! -f methurepos.db.tar.gz ]; then
+
+                  echo "No existing database found."
+                  echo "Creating new database..."
+
+                  repo-add methurepos.db.tar.gz \
+                    ./*.pkg.tar.zst
+
+              else
+
+                  # Find packages that are not represented in the DB
+                  rm -f new-packages.txt
+
+                  touch new-packages.txt
+
+                  for pkg in ./*.pkg.tar.zst; do
+
+                      [ -f "$pkg" ] || continue
+
+                      filename="$(basename "$pkg")"
+
+                      if tar -xOf methurepos.db.tar.gz \
+                          --wildcards "*/desc" 2>/dev/null |
+                          grep -Fqx "$filename"; then
+
+                          echo "Already in DB: $filename"
+
+                      else
+
+                          echo "Adding: $filename"
+                          echo "$pkg" >> new-packages.txt
+
+                      fi
+
+                  done
+
+                  if [ -s new-packages.txt ]; then
+
+                      echo ""
+                      echo "=== Adding new packages ==="
+
+                      repo-add methurepos.db.tar.gz \
+                        $(cat new-packages.txt)
+
+                  else
+
+                      echo ""
+                      echo "No new packages."
+
+                  fi
+
+              fi
+
+              echo ""
+              echo "=== Database created ==="
+
               ls -lah methurepos*
             '
 
-      - name: Update mr release
+
+      #################################################
+      # CREATE REGULAR .db / .files COPIES
+      #################################################
+
+      - name: Create regular database files
+        run: |
+          set -Eeuo pipefail
+
+          cd repo
+
+          rm -f methurepos.db
+          rm -f methurepos.files
+
+          cp -L methurepos.db.tar.gz methurepos.db
+
+          if [ -f methurepos.files.tar.gz ]; then
+              cp -L methurepos.files.tar.gz methurepos.files
+          fi
+
+          echo "=== Final database files ==="
+
+          ls -lah methurepos*
+
+
+      #################################################
+      # UPLOAD UPDATED DATABASE
+      #################################################
+
+      - name: Upload updated repository database
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -Eeuo pipefail
+
+          echo "=== Uploading updated database ==="
+
           gh release upload mr \
             repo/methurepos.db \
             repo/methurepos.db.tar.gz \
@@ -75,4 +264,35 @@ jobs:
             --repo Methusan105/archconfig \
             --clobber
 
-          echo "MethuRepo updated successfully!"
+
+      #################################################
+      # UPLOAD NEW PACKAGES
+      #################################################
+
+      - name: Upload new packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+
+          cd repo
+
+          echo "=== Finding packages ==="
+
+          for pkg in *.pkg.tar.zst; do
+
+              [ -f "$pkg" ] || continue
+
+              echo "Uploading: $pkg"
+
+              gh release upload mr \
+                "$pkg" \
+                --repo Methusan105/archconfig \
+                --clobber
+
+          done
+
+          echo ""
+          echo "====================================="
+          echo " MethuRepo update complete"
+          echo "====================================="
