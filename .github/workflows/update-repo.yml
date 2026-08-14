@@ -81,7 +81,7 @@ jobs:
 
           else
 
-            docker run --rm \
+            docker run --rm -i \
               -v "$PWD:/work" \
               archlinux:latest \
               bash <<'CONTAINER'
@@ -165,7 +165,7 @@ jobs:
 
           : > release-metadata.txt
 
-          docker run --rm \
+          docker run --rm -i \
             -v "$PWD:/work" \
             archlinux:latest \
             bash <<'CONTAINER'
@@ -406,7 +406,7 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          docker run --rm \
+          docker run --rm -i \
             -v "$PWD:/work" \
             archlinux:latest \
             bash <<'CONTAINER'
@@ -552,7 +552,7 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          docker run --rm \
+          docker run --rm -i \
             -v "$PWD:/work" \
             archlinux:latest \
             bash <<'CONTAINER'
