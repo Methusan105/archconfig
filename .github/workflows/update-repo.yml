@@ -13,10 +13,10 @@ jobs:
     steps:
 
       #################################################
-      # DOWNLOAD EXISTING DATABASE
+      # DOWNLOAD CURRENT DATABASE
       #################################################
 
-      - name: Download existing MethuRepo database
+      - name: Download current database
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -35,10 +35,10 @@ jobs:
 
 
       #################################################
-      # GET ALL PACKAGE ASSETS FROM MR
+      # GET RELEASE PACKAGES
       #################################################
 
-      - name: Get packages from mr release
+      - name: Get packages from mr
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -48,176 +48,174 @@ jobs:
             --repo Methusan105/archconfig \
             --json assets \
             --jq '.assets[].name' |
-            grep '\.pkg\.tar\.zst$' |
-            sort |
-            uniq \
-            > release-packages.txt
+            grep -E '\.pkg\.tar\.zst$' |
+            sort -u \
+            > release-packages.txt || true
 
           echo "=== Packages in mr ==="
-          cat release-packages.txt
+
+          cat release-packages.txt || true
 
 
       #################################################
-      # READ PACKAGES FROM DATABASE
+      # EXTRACT DATABASE METADATA
       #################################################
 
-      - name: Read packages from database
+      - name: Extract database package metadata
         run: |
           set -Eeuo pipefail
 
-          touch db-packages.txt
+          : > db-packages.txt
 
           if [ -f repo/methurepos.db.tar.gz ]; then
 
             tar -xOf repo/methurepos.db.tar.gz \
               --wildcards '*/desc' 2>/dev/null |
-              awk '
-                /^%FILENAME%$/ {
-                    getline
-                    print
+            awk '
+              /^%NAME%$/ {
+                getline name
+              }
+
+              /^%VERSION%$/ {
+                getline version
+              }
+
+              /^%FILENAME%$/ {
+                getline filename
+
+                if (name != "" && version != "" && filename != "") {
+                  print name "|" version "|" filename
                 }
-              ' |
-              sort |
-              uniq \
-              > db-packages.txt
+
+                name=""
+                version=""
+                filename=""
+              }
+            ' |
+            sort -u > db-packages.txt
 
           fi
 
-          echo "=== Packages in methurepos database ==="
+          echo "=== Packages in DB ==="
+
           cat db-packages.txt || true
 
 
       #################################################
-      # COMPARE DB AND RELEASE
+      # EXTRACT RELEASE PACKAGE METADATA
       #################################################
 
-      - name: Compare repository with release
-        run: |
-          set -Eeuo pipefail
-
-          echo "=========================================="
-          echo " COMPARING METHUREPOS DB WITH MR RELEASE"
-          echo "=========================================="
-          echo ""
-
-          echo "=== DB ONLY ==="
-          comm -23 db-packages.txt release-packages.txt || true
-
-          echo ""
-          echo "=== RELEASE ONLY ==="
-          comm -13 db-packages.txt release-packages.txt || true
-
-          echo ""
-          echo "=== SAME ==="
-          comm -12 db-packages.txt release-packages.txt || true
-
-
-      #################################################
-      # FIND PACKAGE NAME
-      #################################################
-
-      - name: Determine changes
-        run: |
-          set -Eeuo pipefail
-
-          touch packages-to-add.txt
-          touch packages-to-remove.txt
-          touch packages-to-download.txt
-
-          #################################################
-          # EXACT FILENAME COMPARISON
-          #################################################
-
-          comm -13 \
-            db-packages.txt \
-            release-packages.txt \
-            > packages-to-add.txt
-
-          comm -23 \
-            db-packages.txt \
-            release-packages.txt \
-            > packages-to-remove.txt
-
-
-          #################################################
-          # DETECT REPLACED VERSIONS
-          #################################################
-
-          echo "=== Checking replaced package versions ==="
-
-          while IFS= read -r oldpkg; do
-
-            [ -z "$oldpkg" ] && continue
-
-            oldname="$(
-              echo "$oldpkg" |
-              sed -E \
-                's/-([0-9][^-]*)-[0-9]+-x86_64\.pkg\.tar\.zst$//'
-            )"
-
-            while IFS= read -r newpkg; do
-
-              [ -z "$newpkg" ] && continue
-
-              newname="$(
-                echo "$newpkg" |
-                sed -E \
-                  's/-([0-9][^-]*)-[0-9]+-x86_64\.pkg\.tar\.zst$//'
-              )"
-
-              if [ "$oldname" = "$newname" ]; then
-
-                echo "REPLACED:"
-                echo "  OLD: $oldpkg"
-                echo "  NEW: $newpkg"
-
-                echo "$oldpkg" >> packages-to-remove.txt
-                echo "$newpkg" >> packages-to-add.txt
-
-              fi
-
-            done < release-packages.txt
-
-          done < packages-to-remove.txt
-
-
-          sort -u packages-to-add.txt \
-            -o packages-to-add.txt
-
-          sort -u packages-to-remove.txt \
-            -o packages-to-remove.txt
-
-
-          #################################################
-          # DISPLAY
-          #################################################
-
-          echo ""
-          echo "=========================================="
-          echo " PACKAGES TO REMOVE"
-          echo "=========================================="
-
-          cat packages-to-remove.txt || true
-
-          echo ""
-          echo "=========================================="
-          echo " PACKAGES TO ADD"
-          echo "=========================================="
-
-          cat packages-to-add.txt || true
-
-
-      #################################################
-      # DOWNLOAD ONLY PACKAGES THAT ARE NEW
-      #################################################
-
-      - name: Download packages to add
+      - name: Download metadata for comparison
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -Eeuo pipefail
 
-          echo "=== Downloading required packages ==="
+          : > release-metadata.txt
+
+          while IFS= read -r pkg; do
+
+            [ -z "$pkg" ] && continue
+
+            echo "$pkg"
+
+          done < release-packages.txt
+
+          echo ""
+          echo "Release package count:"
+          wc -l release-packages.txt
+
+
+      #################################################
+      # DETERMINE ADD / REMOVE
+      #################################################
+
+      - name: Determine repository changes
+        run: |
+          set -Eeuo pipefail
+
+          : > packages-to-add.txt
+          : > packages-to-remove.txt
+
+          #################################################
+          # PACKAGES CURRENTLY IN DB
+          #################################################
+
+          cut -d'|' -f3 db-packages.txt |
+            sort -u \
+            > db-filenames.txt
+
+
+          #################################################
+          # PACKAGES CURRENTLY IN RELEASE
+          #################################################
+
+          cp release-packages.txt release-filenames.txt
+
+
+          #################################################
+          # EXACT SAME FILE = UNCHANGED
+          #################################################
+
+          comm -12 \
+            db-filenames.txt \
+            release-filenames.txt \
+            > unchanged.txt
+
+
+          #################################################
+          # RELEASE ONLY = NEW
+          #################################################
+
+          comm -13 \
+            db-filenames.txt \
+            release-filenames.txt \
+            > packages-to-add.txt
+
+
+          #################################################
+          # DB ONLY = DELETED
+          #################################################
+
+          comm -23 \
+            db-filenames.txt \
+            release-filenames.txt \
+            > packages-to-remove.txt
+
+
+          echo ""
+          echo "================================"
+          echo "UNCHANGED"
+          echo "================================"
+
+          cat unchanged.txt || true
+
+
+          echo ""
+          echo "================================"
+          echo "TO ADD"
+          echo "================================"
+
+          cat packages-to-add.txt || true
+
+
+          echo ""
+          echo "================================"
+          echo "TO REMOVE"
+          echo "================================"
+
+          cat packages-to-remove.txt || true
+
+
+      #################################################
+      # DOWNLOAD NEW PACKAGES
+      #################################################
+
+      - name: Download new packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
 
           while IFS= read -r pkg; do
 
@@ -238,7 +236,7 @@ jobs:
       # UPDATE DATABASE
       #################################################
 
-      - name: Update database
+      - name: Update repository database
         run: |
           set -Eeuo pipefail
 
@@ -255,73 +253,79 @@ jobs:
 
 
               #################################################
-              # CREATE DATABASE IF NEEDED
+              # CREATE DATABASE
               #################################################
 
               if [ ! -f methurepos.db.tar.gz ]; then
 
-                echo "Creating new repository database."
+                echo "Creating new repository."
 
-                first_pkg=""
+                packages=()
 
                 for pkg in ./*.pkg.tar.zst; do
-                  if [ -f "$pkg" ]; then
-                    first_pkg="$pkg"
-                    break
-                  fi
+
+                  [ -f "$pkg" ] || continue
+
+                  packages+=("$pkg")
+
                 done
 
-                if [ -n "$first_pkg" ]; then
-
-                  repo-add \
-                    methurepos.db.tar.gz \
-                    "$first_pkg"
-
-                else
+                if [ "${#packages[@]}" -eq 0 ]; then
 
                   echo "ERROR: No packages available."
                   exit 1
 
                 fi
 
+                repo-add \
+                  methurepos.db.tar.gz \
+                  "${packages[@]}"
+
               fi
 
 
               #################################################
-              # REMOVE PACKAGES
+              # REMOVE DELETED PACKAGES
               #################################################
 
               echo ""
-              echo "=== Removing packages ==="
+              echo "=== Removing deleted packages ==="
 
-              while IFS= read -r pkg; do
+              while IFS= read -r filename; do
 
-                [ -z "$pkg" ] && continue
+                [ -z "$filename" ] && continue
 
-                echo "Removing: $pkg"
+                echo "Removing: $filename"
 
-                # Find the package name from the DB.
+
+                #################################################
+                # Find package NAME in database
+                #################################################
+
                 pkgname="$(
                   tar -xOf methurepos.db.tar.gz \
                     --wildcards "*/desc" 2>/dev/null |
-                  awk -v target="$pkg" '
-                    /^%FILENAME%$/ {
-                      getline filename
-
-                      if (filename == target) {
-                        found=1
-                      }
-
-                      next
+                  awk -v target="$filename" '
+                    BEGIN {
+                      name=""
+                      file=""
                     }
 
-                    found && /^%NAME%$/ {
-                      getline
-                      print
-                      exit
+                    /^%NAME%$/ {
+                      getline name
+                    }
+
+                    /^%FILENAME%$/ {
+                      getline file
+
+                      if (file == target) {
+                        print name
+                        exit
+                      }
                     }
                   '
                 )"
+
 
                 if [ -n "$pkgname" ]; then
 
@@ -333,7 +337,7 @@ jobs:
 
                 else
 
-                  echo "WARNING: Could not find $pkg"
+                  echo "WARNING: Package not found: $filename"
 
                 fi
 
@@ -341,51 +345,54 @@ jobs:
 
 
               #################################################
-              # ADD PACKAGES
+              # ADD NEW PACKAGES
               #################################################
 
               echo ""
               echo "=== Adding packages ==="
 
-              while IFS= read -r pkg; do
+              while IFS= read -r filename; do
 
-                [ -z "$pkg" ] && continue
+                [ -z "$filename" ] && continue
 
-                if [ -f "$pkg" ]; then
+                if [ ! -f "$filename" ]; then
 
-                  echo "Adding: $pkg"
+                  echo "ERROR: Missing package:"
+                  echo "$filename"
 
-                  repo-add \
-                    methurepos.db.tar.gz \
-                    "$pkg"
-
-                else
-
-                  echo "ERROR: Missing package $pkg"
                   exit 1
 
                 fi
+
+                echo "Adding: $filename"
+
+                repo-add \
+                  methurepos.db.tar.gz \
+                  "$filename"
 
               done < /work/packages-to-add.txt
 
 
               #################################################
-              # COMPLETE
+              # FINAL
               #################################################
 
               echo ""
               echo "=== Final database ==="
 
-              ls -lah methurepos.db.tar.gz
+              tar -tzf methurepos.db.tar.gz | head
+
+              echo ""
+              ls -lh methurepos.db.tar.gz
 
             '
 
 
       #################################################
-      # CREATE DB ASSET
+      # PREPARE DB
       #################################################
 
-      - name: Prepare database
+      - name: Prepare database assets
         run: |
           set -Eeuo pipefail
 
@@ -398,14 +405,17 @@ jobs:
             methurepos.db
 
           echo "=== Database ==="
-          ls -lah methurepos.db*
+
+          ls -lh \
+            methurepos.db \
+            methurepos.db.tar.gz
 
 
       #################################################
-      # REMOVE OLD DB FROM RELEASE
+      # DELETE OLD DB ASSETS
       #################################################
 
-      - name: Replace database on GitHub
+      - name: Delete old database assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -425,7 +435,7 @@ jobs:
 
 
       #################################################
-      # UPLOAD DATABASE
+      # UPLOAD NEW DB
       #################################################
 
       - name: Upload updated database
@@ -445,13 +455,11 @@ jobs:
       # REMOVE DELETED PACKAGE ASSETS
       #################################################
 
-      - name: Remove deleted package assets
+      - name: Remove deleted packages from release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -Eeuo pipefail
-
-          echo "=== Removing packages no longer in mr ==="
 
           while IFS= read -r pkg; do
 
@@ -477,8 +485,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -Eeuo pipefail
-
-          echo "=== Uploading new packages ==="
 
           while IFS= read -r pkg; do
 
@@ -515,10 +521,6 @@ jobs:
 
           echo ""
           echo "Unchanged:"
-          comm -12 \
-            db-packages.txt \
-            release-packages.txt \
-            || true
+          cat unchanged.txt || true
 
           echo ""
-          echo "=============================================="
