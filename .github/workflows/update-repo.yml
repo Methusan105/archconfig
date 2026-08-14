@@ -302,9 +302,6 @@ jobs:
               echo "$release_filename" \
                 >> packages-to-download.txt
 
-              echo "$release_name" \
-                >> packages-to-remove.txt
-
             fi
 
           done < release-metadata.txt
@@ -568,6 +565,10 @@ jobs:
           cp \
             repo/methurepos.db.tar.gz \
             /tmp/repo/methurepos.db.tar.gz
+
+          ln -s \
+            methurepos.db.tar.gz \
+            /tmp/repo/methurepos.db
 
 
           cat > /tmp/pacman.conf <<EOF
