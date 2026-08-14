@@ -7,90 +7,63 @@ permissions:
   contents: write
 
 jobs:
-  update:
+  update-repo:
     runs-on: ubuntu-latest
 
     steps:
 
-      - name: Download current repository database
+      #################################################
+      # GET PACKAGES FROM MR RELEASE
+      #################################################
+
+      - name: Get packages from mr release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -Eeuo pipefail
 
-          mkdir -p repo
+          mkdir -p packages repo
 
-          gh release download mr \
-            --repo Methusan105/archconfig \
-            --pattern 'methurepos.db.tar.gz' \
-            --dir repo \
-            --clobber \
-            || true
-
-          if [ -f repo/methurepos.db.tar.gz ]; then
-            echo "Existing database found."
-          else
-            echo "No existing database."
-          fi
-
-
-      - name: Get package list from mr
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -Eeuo pipefail
+          echo "=== Getting package list from mr ==="
 
           gh release view mr \
             --repo Methusan105/archconfig \
             --json assets \
-            --jq '.assets[].name' |
-            grep -E '\.pkg\.tar\.zst$' |
-            sort -u \
+            --jq '.assets[].name' \
+            | grep -E '\.pkg\.tar\.zst$' \
+            | sort -u \
             > release.txt \
             || true
 
+          echo ""
           echo "=== Packages in mr ==="
 
           cat release.txt || true
 
-
-      - name: Show current state
-        run: |
-          set -Eeuo pipefail
-
           echo ""
-          echo "================================"
-          echo "RELEASE PACKAGES"
-          echo "================================"
-
-          cat release.txt || true
-
-          echo ""
-          echo "Count:"
+          echo "Package count:"
           wc -l release.txt
 
 
       #################################################
-      # DOWNLOAD ALL RELEASE PACKAGES TEMPORARILY
-      #
-      # This is intentionally only used for comparison.
-      # Packages that are already in the database don't
-      # need to be re-added.
+      # DOWNLOAD PACKAGES FROM MR
       #################################################
 
-      - name: Download release packages
+      - name: Download packages
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -Eeuo pipefail
 
-          mkdir -p packages
+          echo "=== Downloading packages ==="
 
           while IFS= read -r pkg; do
 
             [ -z "$pkg" ] && continue
 
-            echo "Downloading $pkg"
+            echo ""
+            echo "Downloading:"
+            echo "$pkg"
 
             gh release download mr \
               --repo Methusan105/archconfig \
@@ -102,7 +75,142 @@ jobs:
 
 
       #################################################
-      # REBUILD DATABASE
+      # CREATE BUILD SCRIPT
+      #################################################
+
+      - name: Create repository build script
+        run: |
+          set -Eeuo pipefail
+
+          cat > build-repo.sh <<'SCRIPT'
+          #!/usr/bin/env bash
+
+          set -Eeuo pipefail
+
+          cd /work
+
+          echo "=========================================="
+          echo " Installing repository tools"
+          echo "=========================================="
+
+          pacman -Sy --noconfirm pacman-contrib
+
+
+          echo ""
+          echo "=========================================="
+          echo " Checking packages"
+          echo "=========================================="
+
+          packages=()
+
+          while IFS= read -r pkg; do
+
+              [ -z "$pkg" ] && continue
+
+              if [ ! -f "packages/$pkg" ]; then
+                  echo ""
+                  echo "ERROR: Package is missing:"
+                  echo "$pkg"
+                  exit 1
+              fi
+
+              packages+=("packages/$pkg")
+
+          done < release.txt
+
+
+          echo ""
+          echo "Found ${#packages[@]} packages."
+
+
+          if [ "${#packages[@]}" -eq 0 ]; then
+
+              echo ""
+              echo "ERROR: No .pkg.tar.zst packages were found in mr."
+
+              exit 1
+
+          fi
+
+
+          echo ""
+          echo "=========================================="
+          echo " Removing old repository database"
+          echo "=========================================="
+
+          rm -f repo/methurepos.db
+          rm -f repo/methurepos.db.tar.gz
+          rm -f repo/methurepos.files
+          rm -f repo/methurepos.files.tar.gz
+
+
+          echo ""
+          echo "=========================================="
+          echo " Creating repository database"
+          echo "=========================================="
+
+
+          repo-add \
+              repo/methurepos.db.tar.gz \
+              "${packages[@]}"
+
+
+          echo ""
+          echo "=========================================="
+          echo " Creating standalone DB file"
+          echo "=========================================="
+
+
+          rm -f repo/methurepos.db
+
+          cp \
+              repo/methurepos.db.tar.gz \
+              repo/methurepos.db
+
+
+          echo ""
+          echo "=========================================="
+          echo " Creating files database"
+          echo "=========================================="
+
+
+          if [ -f repo/methurepos.files.tar.gz ]; then
+
+              rm -f repo/methurepos.files
+
+              cp \
+                  repo/methurepos.files.tar.gz \
+                  repo/methurepos.files
+
+          fi
+
+
+          echo ""
+          echo "=========================================="
+          echo " Final repository"
+          echo "=========================================="
+
+          ls -lah repo/
+
+
+          echo ""
+          echo "=========================================="
+          echo " Repository packages"
+          echo "=========================================="
+
+          repo-add \
+              --verify \
+              repo/methurepos.db.tar.gz \
+              "${packages[@]}" \
+              || true
+
+          SCRIPT
+
+          chmod +x build-repo.sh
+
+
+      #################################################
+      # BUILD DATABASE INSIDE ARCH LINUX
       #################################################
 
       - name: Build repository database
@@ -112,90 +220,43 @@ jobs:
           docker run --rm \
             -v "$PWD:/work" \
             archlinux:latest \
-            bash -c '
-
-              set -Eeuo pipefail
-
-              cd /work
-
-              pacman -Sy --noconfirm pacman-contrib
-
-
-              #################################################
-              # CREATE FRESH DATABASE
-              #################################################
-
-              rm -f repo/methurepos.db.tar.gz
-              rm -f repo/methurepos.db
-
-
-              #################################################
-              # ADD EVERY PACKAGE CURRENTLY IN MR
-              #################################################
-
-              packages=()
-
-              for pkg in packages/*.pkg.tar.zst; do
-
-                [ -f "$pkg" ] || continue
-
-                packages+=("$pkg")
-
-              done
-
-
-              if [ "${#packages[@]}" -eq 0 ]; then
-
-                echo "ERROR: mr contains no packages."
-
-                exit 1
-
-              fi
-
-
-              echo ""
-              echo "Adding ${#packages[@]} packages."
-
-
-              repo-add \
-                repo/methurepos.db.tar.gz \
-                "${packages[@]}"
-
-
-              #################################################
-              # CREATE DB COPY
-              #################################################
-              
-              rm -f repo/methurepos.db
-              
-              cp \
-                repo/methurepos.db.tar.gz \
-                repo/methurepos.db
-              
-              
-              #################################################
-              # SHOW RESULT
-              #################################################
-              
-              echo ""
-              echo "================================"
-              echo "FINAL DATABASE"
-              echo "================================"
-              
-              ls -lh \
-                repo/methurepos.db \
-                repo/methurepos.db.tar.gz
+            bash /work/build-repo.sh
 
 
       #################################################
-      # REPLACE DATABASE ON RELEASE
+      # SHOW DATABASE
       #################################################
 
-      - name: Replace repository database
+      - name: Verify repository database
+        run: |
+          set -Eeuo pipefail
+
+          echo "=========================================="
+          echo " Repository database"
+          echo "=========================================="
+
+          ls -lah repo/methurepos.db
+          ls -lah repo/methurepos.db.tar.gz
+
+          echo ""
+          echo "=========================================="
+          echo " Database contents"
+          echo "=========================================="
+
+          tar -tzf repo/methurepos.db.tar.gz
+
+
+      #################################################
+      # DELETE OLD DATABASE ASSETS
+      #################################################
+
+      - name: Delete old database assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -Eeuo pipefail
+
+          echo "=== Removing old database assets ==="
 
           gh release delete-asset mr \
             methurepos.db \
@@ -209,6 +270,30 @@ jobs:
             --yes \
             || true
 
+          gh release delete-asset mr \
+            methurepos.files \
+            --repo Methusan105/archconfig \
+            --yes \
+            || true
+
+          gh release delete-asset mr \
+            methurepos.files.tar.gz \
+            --repo Methusan105/archconfig \
+            --yes \
+            || true
+
+
+      #################################################
+      # UPLOAD NEW DATABASE
+      #################################################
+
+      - name: Upload repository database
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+
+          echo "=== Uploading database ==="
 
           gh release upload mr \
             repo/methurepos.db \
@@ -221,20 +306,23 @@ jobs:
       # SUMMARY
       #################################################
 
-      - name: Summary
+      - name: Show final result
         run: |
+          set -Eeuo pipefail
+
           echo ""
           echo "=============================================="
-          echo "        METHUREPOS UPDATED"
+          echo "          METHUREPOS UPDATE COMPLETE"
           echo "=============================================="
           echo ""
 
-          echo "Packages in mr:"
+          echo "Release:"
+          echo "https://github.com/Methusan105/archconfig/releases/tag/mr"
+
+          echo ""
+          echo "Packages:"
           cat release.txt
 
           echo ""
-          echo "Repository database:"
-          ls -lh repo/methurepos.db* || true
-
-          echo ""
-          echo "Done."
+          echo "Database:"
+          ls -lh repo/methurepos.db*
