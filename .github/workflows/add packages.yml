@@ -274,18 +274,10 @@ jobs:
               filename="$(basename "$pkg")"
 
 
-              name="$(
-                pacman -Qp \
-                  --print-format "%n" \
-                  "$pkg"
-              )"
+              name="$(pkginfo -p "$pkg" -f "%n")"
 
 
-              version="$(
-                pacman -Qp \
-                  --print-format "%v" \
-                  "$pkg"
-              )"
+              version="$(pkginfo -p "$pkg" -f "%v")"
 
 
               echo
