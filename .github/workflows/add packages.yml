@@ -13,80 +13,103 @@ jobs:
     steps:
 
       # ============================================================
-      # DOWNLOAD EXISTING DB IF IT EXISTS
+      # 1. SETUP WORK DIRECTORY & DOWNLOAD EXISTING DB
       # ============================================================
 
-      - name: Download existing database if available
+      - name: Download existing database
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -Eeuo pipefail
 
-          mkdir -p work/packages
+          mkdir -p work/db_extract work/packages work/add
 
-          echo "Checking for existing methurepos database..."
+          echo "Checking for existing repository database..."
 
           if gh release download mr \
               --repo Methusan105/archconfig \
               --pattern 'methurepos.db*' \
               --dir work \
               --clobber; then
-
-              echo "Existing database found."
+              echo "Existing database downloaded."
               ls -lh work/methurepos.db*
           else
-              echo "No existing database found."
-              echo "A new database will be created."
-              rm -f work/methurepos.db*
+              echo "No database found. A fresh one will be created."
           fi
 
-
       # ============================================================
-      # DOWNLOAD ALL PACKAGES FROM MR
+      # 2. FILTER & DOWNLOAD ONLY UNREGISTERED/NEW PACKAGES
       # ============================================================
 
-      - name: Download packages from mr
+      - name: Determine missing packages and download selectively
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -Eeuo pipefail
 
-          echo "Downloading packages from mr..."
+          # Extract current DB entries
+          : > work/db_filenames.txt
 
-          gh release download mr \
-            --repo Methusan105/archconfig \
-            --pattern '*.pkg.tar.zst' \
-            --dir work/packages \
-            --clobber
+          if [ -s work/methurepos.db.tar.gz ]; then
+              tar -xzf work/methurepos.db.tar.gz -C work/db_extract 2>/dev/null || true
 
-          echo
-          echo "Packages found:"
-
-          find work/packages \
-            -type f \
-            -name '*.pkg.tar.zst' \
-            -printf '%f\n' \
-            | sort
-
-          COUNT=$(find work/packages \
-            -type f \
-            -name '*.pkg.tar.zst' \
-            | wc -l)
-
-          if [ "$COUNT" -eq 0 ]; then
-            echo "ERROR: No .pkg.tar.zst packages found in mr."
-            exit 1
+              for desc in work/db_extract/*/desc; do
+                  [ -f "$desc" ] || continue
+                  awk '/^%FILENAME%/ {getline; print}' "$desc" >> work/db_filenames.txt
+              done
           fi
 
-          echo
-          echo "Total packages: $COUNT"
+          echo "=== PACKAGES ALREADY IN DATABASE ==="
+          cat work/db_filenames.txt | sort || true
+          echo "===================================="
 
+          # Fetch list of release assets via GitHub CLI
+          echo "Fetching release asset list..."
+          gh release view mr \
+            --repo Methusan105/archconfig \
+            --json assets \
+            --jq '.assets[].name' \
+            | grep '\.pkg\.tar\.zst$' > work/all_release_pkgs.txt || true
+
+          # Identify packages present in release assets BUT missing in DB
+          : > work/download_list.txt
+
+          while IFS= read -r asset; do
+              [ -n "$asset" ] || continue
+
+              if grep -qx "$asset" work/db_filenames.txt; then
+                  echo "SKIP (Already in DB): $asset"
+              else
+                  echo "DOWNLOAD NEEDED: $asset"
+                  echo "$asset" >> work/download_list.txt
+              fi
+          done < work/all_release_pkgs.txt
+
+          DOWNLOAD_COUNT=$(wc -l < work/download_list.txt)
+
+          echo
+          echo "Total new/updated packages to download: $DOWNLOAD_COUNT"
+
+          if [ "$DOWNLOAD_COUNT" -eq 0 ]; then
+              echo "NO_NEW_PACKAGES=true" >> $GITHUB_ENV
+              exit 0
+          fi
+
+          # Download only the filtered missing/updated packages
+          while IFS= read -r pkg_name; do
+              gh release download mr \
+                --repo Methusan105/archconfig \
+                --pattern "$pkg_name" \
+                --dir work/packages \
+                --clobber
+          done < work/download_list.txt
 
       # ============================================================
-      # UPDATE REPOSITORY (DOCKER)
+      # 3. UPDATE DATABASE WITH REPO-ADD (DOCKER)
       # ============================================================
 
       - name: Update repository database
+        if: env.NO_NEW_PACKAGES != 'true'
         run: |
           set -Eeuo pipefail
 
@@ -105,112 +128,33 @@ jobs:
           pacman -Sy --noconfirm pacman-contrib libarchive
 
           rm -rf /tmp/methurepo
-          mkdir -p /tmp/methurepo/db /tmp/methurepo/add
+          mkdir -p /tmp/methurepo
 
-          # Handle existing database
           if [ -f work/methurepos.db.tar.gz ]; then
-              echo "Existing database found."
               cp work/methurepos.db.tar.gz /tmp/methurepo/methurepos.db.tar.gz
-          elif [ -f work/methurepos.db ]; then
-              echo "Existing database file found."
-              cp work/methurepos.db /tmp/methurepo/methurepos.db.tar.gz
           fi
-
-          # Read existing packages from DB
-          EXISTING=""
-          if [ -s /tmp/methurepo/methurepos.db.tar.gz ]; then
-              libarchive -xzf /tmp/methurepo/methurepos.db.tar.gz -C /tmp/methurepo/db 2>/dev/null || true
-          fi
-
-          if find /tmp/methurepo/db -type f -name desc | grep -q .; then
-              EXISTING=$(
-                for desc in /tmp/methurepo/db/*/desc; do
-                  [ -f "$desc" ] || continue
-                  name=""
-                  version=""
-                  filename=""
-
-                  while IFS= read -r line; do
-                    case "$line" in
-                      "%NAME%")     IFS= read -r name ;;
-                      "%VERSION%")  IFS= read -r version ;;
-                      "%FILENAME%") IFS= read -r filename ;;
-                    esac
-                  done < "$desc"
-
-                  if [ -n "$name" ]; then
-                    printf "%s\t%s\t%s\n" "$name" "$version" "$filename"
-                  fi
-                done
-              )
-          fi
-
-          echo
-          echo "=========================================="
-          echo "COMPARISON"
-          echo "=========================================="
 
           shopt -s nullglob
-          packages=( /work/work/packages/*.pkg.tar.zst )
-          ADD_COUNT=0
+          new_packages=( /work/work/packages/*.pkg.tar.zst )
 
-          for pkg in "${packages[@]}"; do
-              filename="$(basename "$pkg")"
-
-              pkg_info="$(pacman -Qip "$pkg")"
-              name="$(echo "$pkg_info" | awk -F ': ' '/^Name/ {print $2}' | xargs)"
-              version="$(echo "$pkg_info" | awk -F ': ' '/^Version/ {print $2}' | xargs)"
-
-              echo "Checking: $filename"
-              echo "Package:  $name"
-              echo "Version:  $version"
-
-              existing_line="$(
-                printf "%s\n" "$EXISTING" |
-                awk -F "\t" -v name="$name" '$1 == name {print; exit}'
-              )"
-
-              if [ -z "$existing_line" ]; then
-                  echo "-> NEW"
-                  cp "$pkg" "/tmp/methurepo/add/$filename"
-                  ADD_COUNT=$((ADD_COUNT + 1))
-                  continue
-              fi
-
-              old_filename="$(printf "%s\n" "$existing_line" | cut -f3)"
-
-              if [ "$old_filename" = "$filename" ]; then
-                  echo "-> UNCHANGED"
-                  continue
-              fi
-
-              echo "-> UPDATED"
-              cp "$pkg" "/tmp/methurepo/add/$filename"
-              ADD_COUNT=$((ADD_COUNT + 1))
-          done
-
-          if [ "$ADD_COUNT" -eq 0 ]; then
-              echo "No new or updated packages. Database remains untouched."
+          if [ ${#new_packages[@]} -eq 0 ]; then
+              echo "No new packages found to process."
               exit 0
           fi
 
           echo
           echo "=========================================="
-          echo "UPDATING DATABASE WITH REPO-ADD"
+          echo "RUNNING REPO-ADD"
           echo "=========================================="
 
-          add_packages=( /tmp/methurepo/add/*.pkg.tar.zst )
-
-          # repo-add generates both methurepos.db.tar.gz and methurepos.db
           repo-add \
             --remove \
             /tmp/methurepo/methurepos.db.tar.gz \
-            "${add_packages[@]}"
+            "${new_packages[@]}"
 
-          # Copy both database representations (actual file and tar archive)
           cp /tmp/methurepo/methurepos.db.tar.gz work/methurepos.db.tar.gz
           
-          # Since GitHub release uploads don't support symlinks properly, copy the content
+          # Maintain physical file copy for GitHub Release asset compatibility
           cp -L /tmp/methurepo/methurepos.db work/methurepos.db 2>/dev/null || cp work/methurepos.db.tar.gz work/methurepos.db
 
           if [ -f /tmp/methurepo/methurepos.files ]; then
@@ -218,44 +162,41 @@ jobs:
             cp /tmp/methurepo/methurepos.files.tar.gz work/methurepos.files.tar.gz 2>/dev/null || true
           fi
 
-          echo "Database successfully generated:"
+          echo "Database successfully updated."
           ls -lh work/methurepos.db*
           EOF
 
-
       # ============================================================
-      # UPLOAD DATABASE
+      # 4. UPLOAD UPDATED DATABASE
       # ============================================================
 
       - name: Upload updated database
+        if: env.NO_NEW_PACKAGES != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -Eeuo pipefail
 
           if [ ! -f work/methurepos.db ]; then
-            echo "No changes were required. Nothing to upload."
+            echo "No changes required. Skipping upload."
             exit 0
           fi
 
           echo "Uploading database files..."
 
-          # Upload both methurepos.db and methurepos.db.tar.gz
           gh release upload mr \
             work/methurepos.db* \
             --repo Methusan105/archconfig \
             --clobber
 
-          echo "Database files uploaded successfully."
-
+          echo "Database uploaded successfully."
 
       # ============================================================
-      # COMPLETE
+      # 5. COMPLETE
       # ============================================================
 
       - name: Complete
         run: |
-          echo
           echo "=========================================="
           echo "METHUREPOS UPDATE COMPLETE"
           echo "=========================================="
