@@ -1,0 +1,284 @@
+name: Add Packages to MethuRepo
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  add-packages:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Download current repository database
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+
+          mkdir -p repo
+
+          gh release download mr \
+            --repo Methusan105/archconfig \
+            --pattern 'methurepos.db.tar.gz' \
+            --dir repo \
+            --clobber \
+            || true
+
+      - name: Download packages from mr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+
+          mkdir -p release-packages
+
+          gh release download mr \
+            --repo Methusan105/archconfig \
+            --pattern '*.pkg.tar.zst' \
+            --dir release-packages \
+            --clobber
+
+      - name: Compare and add new packages
+        run: |
+          set -Eeuo pipefail
+
+          docker run --rm \
+            -v "$PWD:/work" \
+            archlinux:latest \
+            bash <<'EOF'
+
+          set -Eeuo pipefail
+
+          cd /work
+
+          pacman -Sy --noconfirm pacman-contrib
+
+
+          ##################################################
+          # CREATE EMPTY DATABASE IF NEEDED
+          ##################################################
+
+          if [ ! -f repo/methurepos.db.tar.gz ]; then
+
+              mkdir -p repo
+
+              repo-add repo/methurepos.db.tar.gz
+
+          fi
+
+
+          ##################################################
+          # READ EXISTING DATABASE
+          ##################################################
+
+          rm -rf /tmp/methurepos-db
+
+          mkdir -p /tmp/methurepos-db
+
+          bsdtar \
+              -xzf repo/methurepos.db.tar.gz \
+              -C /tmp/methurepos-db
+
+
+          : > /tmp/existing.txt
+
+
+          for desc in /tmp/methurepos-db/*/desc; do
+
+              [ -f "$desc" ] || continue
+
+              name=""
+              version=""
+              filename=""
+
+
+              while IFS= read -r line; do
+
+                  case "$line" in
+
+                      "%NAME%")
+                          IFS= read -r name
+                          ;;
+
+                      "%VERSION%")
+                          IFS= read -r version
+                          ;;
+
+                      "%FILENAME%")
+                          IFS= read -r filename
+                          ;;
+
+                  esac
+
+              done < "$desc"
+
+
+              if [ -n "$name" ]; then
+
+                  printf '%s\t%s\t%s\n' \
+                      "$name" \
+                      "$version" \
+                      "$filename" \
+                      >> /tmp/existing.txt
+
+              fi
+
+          done
+
+
+          ##################################################
+          # CHECK RELEASE PACKAGES
+          ##################################################
+
+          mkdir -p packages
+
+          shopt -s nullglob
+
+
+          for pkg in /work/release-packages/*.pkg.tar.zst; do
+
+              filename="$(basename "$pkg")"
+
+              name="$(
+                  pacman -Qp \
+                      --print-format '%n' \
+                      "$pkg"
+              )"
+
+              version="$(
+                  pacman -Qp \
+                      --print-format '%v' \
+                      "$pkg"
+              )"
+
+
+              echo
+              echo "Checking: $filename"
+              echo "Package:  $name"
+              echo "Version:  $version"
+
+
+              existing="$(
+                  awk -F '\t' \
+                      -v n="$name" \
+                      '$1 == n {print; exit}' \
+                      /tmp/existing.txt
+              )"
+
+
+              if [ -z "$existing" ]; then
+
+                  echo "-> NEW"
+
+                  cp "$pkg" packages/
+
+              else
+
+                  old_version="$(printf '%s' "$existing" | cut -f2)"
+                  old_filename="$(printf '%s' "$existing" | cut -f3)"
+
+
+                  if [ "$old_filename" = "$filename" ]; then
+
+                      echo "-> ALREADY EXISTS"
+
+                  else
+
+                      echo "-> VERSION DIFFERENCE"
+                      echo "Old: $old_filename"
+                      echo "New: $filename"
+
+                      cp "$pkg" packages/
+
+                  fi
+
+              fi
+
+          done
+
+
+          ##################################################
+          # ADD PACKAGES
+          ##################################################
+
+          packages=(packages/*.pkg.tar.zst)
+
+
+          if [ "${#packages[@]}" -gt 0 ]; then
+
+              echo
+              echo "=========================================="
+              echo "ADDING PACKAGES"
+              echo "=========================================="
+
+              printf '%s\n' "${packages[@]}"
+
+
+              repo-add \
+                  repo/methurepos.db.tar.gz \
+                  "${packages[@]}"
+
+          else
+
+              echo
+              echo "No new packages."
+
+          fi
+
+
+          ##################################################
+          # DATABASE SYMLINK
+          ##################################################
+
+          rm -f repo/methurepos.db
+
+          ln -s \
+              methurepos.db.tar.gz \
+              repo/methurepos.db
+
+
+          echo
+          echo "=========================================="
+          echo "FINAL DATABASE"
+          echo "=========================================="
+
+          ls -lah repo/
+
+          EOF
+
+      - name: Upload updated database
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+
+          gh release delete-asset mr \
+            methurepos.db.tar.gz \
+            --repo Methusan105/archconfig \
+            --yes \
+            || true
+
+          gh release delete-asset mr \
+            methurepos.db \
+            --repo Methusan105/archconfig \
+            --yes \
+            || true
+
+
+          gh release upload mr \
+            repo/methurepos.db.tar.gz \
+            repo/methurepos.db \
+            --repo Methusan105/archconfig \
+            --clobber
+
+
+      - name: Summary
+        run: |
+          echo "=========================================="
+          echo "ADD COMPLETE"
+          echo "=========================================="
+
+          ls -lah repo/
