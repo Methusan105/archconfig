@@ -13,6 +13,15 @@ jobs:
     steps:
 
       # ============================================================
+      # SETUP ENVIRONMENT & UTILITIES
+      # ============================================================
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libarchive-tools zstd gh
+
+      # ============================================================
       # DOWNLOAD EXISTING DB IF IT EXISTS
       # ============================================================
 
@@ -22,7 +31,7 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          mkdir -p work
+          mkdir -p work/db_extract work/packages work/add
 
           echo "Checking for existing methurepos database..."
 
@@ -33,18 +42,13 @@ jobs:
               --clobber; then
 
               echo "Existing database found."
-
               ls -lh work/methurepos.db.tar.gz
-
+              
+              # Extract existing database entries
+              bsdtar -xzf work/methurepos.db.tar.gz -C work/db_extract 2>/dev/null || true
           else
-
-              echo "No existing database found."
-              echo "A new database will be created."
-
-              rm -f work/methurepos.db.tar.gz
-
+              echo "No existing database found. A new database will be created."
           fi
-
 
       # ============================================================
       # DOWNLOAD ALL PACKAGES FROM MR
@@ -55,8 +59,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -Eeuo pipefail
-
-          mkdir -p work/packages
 
           echo "Downloading packages from mr..."
 
@@ -69,408 +71,112 @@ jobs:
           echo
           echo "Packages found:"
 
-          find work/packages \
-            -type f \
-            -name '*.pkg.tar.zst' \
-            -printf '%f\n' \
-            | sort
+          find work/packages -type f -name '*.pkg.tar.zst' -exec basename {} \; | sort
 
-          COUNT=$(find work/packages \
-            -type f \
-            -name '*.pkg.tar.zst' \
-            | wc -l)
+          COUNT=$(find work/packages -type f -name '*.pkg.tar.zst' | wc -l)
 
           if [ "$COUNT" -eq 0 ]; then
             echo "ERROR: No .pkg.tar.zst packages found in mr."
             exit 1
           fi
 
-          echo
           echo "Total packages: $COUNT"
 
-
       # ============================================================
-      # UPDATE REPOSITORY
+      # BUILD REPOSITORY DATABASE NATIVELY
       # ============================================================
 
-      - name: Update repository database
+      - name: Process packages and create database
         run: |
           set -Eeuo pipefail
 
-          docker run --rm \
-            -v "$PWD:/work" \
-            archlinux:latest \
-            bash -c '
-
-          set -Eeuo pipefail
-
-          cd /work
-
-
-          # ========================================================
-          # INSTALL REPO TOOLS
-          # ========================================================
-
-          echo
-          echo "=========================================="
-          echo "INSTALLING ARCH REPOSITORY TOOLS"
-          echo "=========================================="
-
-          pacman -Sy --noconfirm pacman-contrib
-
-
-          # ========================================================
-          # TEMPORARY WORKSPACE
-          # ========================================================
-
-          rm -rf /tmp/methurepo
-
-          mkdir -p /tmp/methurepo
-
-
-          # ========================================================
-          # EXISTING DATABASE
-          # ========================================================
-
-          if [ -f work/methurepos.db.tar.gz ]; then
-
-              echo
-              echo "=========================================="
-              echo "EXISTING DATABASE FOUND"
-              echo "=========================================="
-
-              cp \
-                work/methurepos.db.tar.gz \
-                /tmp/methurepo/methurepos.db.tar.gz
-
-          else
-
-              echo
-              echo "=========================================="
-              echo "NO DATABASE FOUND"
-              echo "=========================================="
-
-              echo "Creating new repository database."
-
-              touch \
-                /tmp/methurepo/methurepos.db.tar.gz
-
-          fi
-
-
-          # ========================================================
-          # READ EXISTING PACKAGES
-          # ========================================================
-
-          rm -rf /tmp/methurepo/db
-
-          mkdir -p /tmp/methurepo/db
-
-
-          EXISTING=""
-
-          if [ -s /tmp/methurepo/methurepos.db.tar.gz ]; then
-
-              bsdtar \
-                -xzf \
-                /tmp/methurepo/methurepos.db.tar.gz \
-                -C \
-                /tmp/methurepo/db \
-                2>/dev/null || true
-
-          fi
-
-
-          if find /tmp/methurepo/db \
-              -type f \
-              -name desc \
-              | grep -q .; then
-
-              EXISTING=$(
-                for desc in /tmp/methurepo/db/*/desc; do
-
-                  [ -f "$desc" ] || continue
-
-                  name=""
-                  version=""
-                  filename=""
-
-                  while IFS= read -r line; do
-
-                    case "$line" in
-
-                      "%NAME%")
-                        IFS= read -r name
-                        ;;
-
-                      "%VERSION%")
-                        IFS= read -r version
-                        ;;
-
-                      "%FILENAME%")
-                        IFS= read -r filename
-                        ;;
-
-                    esac
-
-                  done < "$desc"
-
-                  if [ -n "$name" ]; then
-
-                    printf "%s\t%s\t%s\n" \
-                      "$name" \
-                      "$version" \
-                      "$filename"
-
-                  fi
-
-                done
-              )
-
-          fi
-
-
-          echo
-          echo "=========================================="
-          echo "EXISTING PACKAGES"
-          echo "=========================================="
-
-
-          if [ -n "$EXISTING" ]; then
-            printf "%s\n" "$EXISTING"
-          else
-            echo "Database is empty."
-          fi
-
-
-          # ========================================================
-          # DETERMINE PACKAGES TO ADD
-          # ========================================================
-
-          rm -rf /tmp/methurepo/add
-
-          mkdir -p /tmp/methurepo/add
-
-
-          echo
-          echo "=========================================="
-          echo "COMPARISON"
-          echo "=========================================="
-
-
           shopt -s nullglob
 
-
-          packages=(
-            /work/work/packages/*.pkg.tar.zst
-          )
-
-
           ADD_COUNT=0
+          NEW_DB_DIR="work/new_db"
+          mkdir -p "$NEW_DB_DIR"
 
+          # Copy existing db entries over
+          if [ -d work/db_extract ] && [ "$(ls -A work/db_extract)" ]; then
+            cp -r work/db_extract/* "$NEW_DB_DIR/"
+          fi
 
-          for pkg in "${packages[@]}"; do
+          echo
+          echo "=========================================="
+          echo "PROCESSING PACKAGES"
+          echo "=========================================="
 
+          for pkg in work/packages/*.pkg.tar.zst; do
               filename="$(basename "$pkg")"
-
-
-              # Extract Name and Version directly using standard pacman output
-              pkg_info="$(pacman -Qip "$pkg")"
-              name="$(echo "$pkg_info" | awk -F ': ' '/^Name/ {print $2}' | xargs)"
-              version="$(echo "$pkg_info" | awk -F ': ' '/^Version/ {print $2}' | xargs)"
-
-
-              echo
-              echo "Checking: $filename"
-              echo "Package:  $name"
-              echo "Version:  $version"
-
-
-              existing_line="$(
-                printf "%s\n" "$EXISTING" |
-                awk -F "\t" \
-                  -v name="$name" \
-                  "\$1 == name {print; exit}"
-              )"
-
-
-              # ====================================================
-              # NEW PACKAGE
-              # ====================================================
-
-              if [ -z "$existing_line" ]; then
-
-                  echo "-> NEW"
-
-                  cp \
-                    "$pkg" \
-                    "/tmp/methurepo/add/$filename"
-
-                  ADD_COUNT=$((ADD_COUNT + 1))
-
-                  continue
-
+              
+              # Extract .PKGINFO from the package without installing anything
+              pkginfo="$(bsdtar -xOf "$pkg" .PKGINFO 2>/dev/null || true)"
+              
+              if [ -z "$pkginfo" ]; then
+                echo "Warning: Could not read .PKGINFO from $filename, skipping."
+                continue
               fi
 
+              pkgname="$(echo "$pkginfo" | awk -F ' = ' '/^pkgname =/ {print $2}')"
+              pkgver="$(echo "$pkginfo" | awk -F ' = ' '/^pkgver =/ {print $2}')"
+              pkgdesc="$(echo "$pkginfo" | awk -F ' = ' '/^pkgdesc =/ {print $2}')"
+              csize="$(stat -c%s "$pkg")"
 
-              old_version="$(
-                printf "%s\n" "$existing_line" |
-                cut -f2
-              )"
+              echo "Checking: $filename ($pkgname $pkgver)"
 
+              target_dir="$NEW_DB_DIR/$pkgname-$pkgver"
 
-              old_filename="$(
-                printf "%s\n" "$existing_line" |
-                cut -f3
-              )"
-
-
-              # ====================================================
-              # SAME PACKAGE
-              # ====================================================
-
-              if [ "$old_filename" = "$filename" ]; then
-
-                  echo "-> UNCHANGED"
-
-                  continue
-
+              # Check if this exact package entry exists already
+              if [ -d "$target_dir" ]; then
+                echo "-> UNCHANGED"
+                continue
               fi
 
+              # Clean up old versions of the same package name if updating
+              rm -rf "$NEW_DB_DIR/${pkgname}-"*
 
-              # ====================================================
-              # UPDATED PACKAGE
-              # ====================================================
+              echo "-> ADDING/UPDATING"
+              mkdir -p "$target_dir"
 
-              echo "-> UPDATED"
+              # Create Arch DB 'desc' file directly
+              cat <<EOF > "$target_dir/desc"
+          %FILENAME%
+          $filename
 
-              echo "Old version: $old_version"
-              echo "New version: $version"
+          %NAME%
+          $pkgname
 
+          %VERSION%
+          $pkgver
 
-              cp \
-                "$pkg" \
-                "/tmp/methurepo/add/$filename"
+          %DESC%
+          $pkgdesc
+
+          %CSIZE%
+          $csize
+
+          EOF
 
               ADD_COUNT=$((ADD_COUNT + 1))
-
           done
-
-
-          # ========================================================
-          # NOTHING NEW
-          # ========================================================
 
           echo
           echo "=========================================="
           echo "RESULT"
           echo "=========================================="
 
-
-          if [ "$ADD_COUNT" -eq 0 ]; then
-
-              echo "No new or updated packages."
-
-              echo "Existing database will remain untouched."
-
-              exit 0
-
+          if [ "$ADD_COUNT" -eq 0 ] && [ -f work/methurepos.db.tar.gz ]; then
+            echo "No changes required."
+            exit 0
           fi
 
+          echo "Packages modified: $ADD_COUNT"
 
-          echo "Packages to add/update: $ADD_COUNT"
+          # Compress into methurepos.db.tar.gz
+          echo "Packaging database archive..."
+          tar -czf work/methurepos.db.tar.gz -C "$NEW_DB_DIR" .
 
-
-          # ========================================================
-          # ADD PACKAGES
-          # ========================================================
-
-          echo
-          echo "=========================================="
-          echo "UPDATING DATABASE"
-          echo "=========================================="
-
-
-          add_packages=(
-            /tmp/methurepo/add/*.pkg.tar.zst
-          )
-
-
-          repo-add \
-            --remove \
-            /tmp/methurepo/methurepos.db.tar.gz \
-            "${add_packages[@]}"
-
-
-          # ========================================================
-          # VERIFY
-          # ========================================================
-
-          echo
-          echo "=========================================="
-          echo "VERIFYING DATABASE"
-          echo "=========================================="
-
-
-          test -s \
-            /tmp/methurepo/methurepos.db.tar.gz
-
-
-          rm -rf /tmp/methurepo/verify
-
-          mkdir -p /tmp/methurepo/verify
-
-
-          bsdtar \
-            -xzf \
-            /tmp/methurepo/methurepos.db.tar.gz \
-            -C \
-            /tmp/methurepo/verify
-
-
-          PACKAGE_COUNT=$(
-            find /tmp/methurepo/verify \
-              -type f \
-              -name desc \
-              | wc -l
-          )
-
-
-          echo "Packages in database: $PACKAGE_COUNT"
-
-
-          if [ "$PACKAGE_COUNT" -eq 0 ]; then
-
-              echo "ERROR: Database is empty."
-
-              exit 1
-
-          fi
-
-
-          # ========================================================
-          # COMMIT
-          # ========================================================
-
-          echo
-          echo "=========================================="
-          echo "COMMITTING DATABASE"
-          echo "=========================================="
-
-
-          cp \
-            /tmp/methurepo/methurepos.db.tar.gz \
-            work/methurepos.db.tar.gz
-
-
-          echo
-          echo "Database successfully generated."
-
-          ls -lh \
-            work/methurepos.db.tar.gz
-
-          '
-
+          ls -lh work/methurepos.db.tar.gz
 
       # ============================================================
       # UPLOAD DATABASE
@@ -483,37 +189,15 @@ jobs:
           set -Eeuo pipefail
 
           if [ ! -f work/methurepos.db.tar.gz ]; then
-
-            echo "No changes were required."
-            echo "Nothing to upload."
-
+            echo "No changes were required. Nothing to upload."
             exit 0
-
           fi
 
-
-          echo "Uploading new database..."
-
+          echo "Uploading updated database..."
 
           gh release upload mr \
             work/methurepos.db.tar.gz \
             --repo Methusan105/archconfig \
             --clobber
 
-
-          echo
           echo "Database uploaded successfully."
-
-
-      # ============================================================
-      # COMPLETE
-      # ============================================================
-
-      - name: Complete
-        run: |
-          echo
-          echo "=========================================="
-          echo "METHUREPOS UPDATE COMPLETE"
-          echo "=========================================="
-
-          ls -lh work/methurepos.db.tar.gz 2>/dev/null || true
