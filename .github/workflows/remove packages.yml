@@ -1,0 +1,278 @@
+name: Remove Packages from MethuRepo
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  remove-packages:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Download current repository database
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+
+          mkdir -p repo
+
+          gh release download mr \
+            --repo Methusan105/archconfig \
+            --pattern 'methurepos.db.tar.gz' \
+            --dir repo \
+            --clobber
+
+
+      - name: Download current mr packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+
+          mkdir -p release-packages
+
+          gh release download mr \
+            --repo Methusan105/archconfig \
+            --pattern '*.pkg.tar.zst' \
+            --dir release-packages \
+            --clobber
+
+
+      - name: Find and remove deleted packages
+        run: |
+          set -Eeuo pipefail
+
+          docker run --rm \
+            -v "$PWD:/work" \
+            archlinux:latest \
+            bash <<'EOF'
+
+          set -Eeuo pipefail
+
+          cd /work
+
+          pacman -Sy --noconfirm pacman-contrib
+
+
+          ##################################################
+          # READ DATABASE
+          ##################################################
+
+          rm -rf /tmp/methurepos-db
+
+          mkdir -p /tmp/methurepos-db
+
+          bsdtar \
+              -xzf repo/methurepos.db.tar.gz \
+              -C /tmp/methurepos-db
+
+
+          : > /tmp/db-packages.txt
+
+
+          for desc in /tmp/methurepos-db/*/desc; do
+
+              [ -f "$desc" ] || continue
+
+
+              name=""
+              version=""
+              filename=""
+
+
+              while IFS= read -r line; do
+
+                  case "$line" in
+
+                      "%NAME%")
+                          IFS= read -r name
+                          ;;
+
+                      "%VERSION%")
+                          IFS= read -r version
+                          ;;
+
+                      "%FILENAME%")
+                          IFS= read -r filename
+                          ;;
+
+                  esac
+
+              done < "$desc"
+
+
+              if [ -n "$name" ]; then
+
+                  printf '%s\t%s\t%s\n' \
+                      "$name" \
+                      "$version" \
+                      "$filename" \
+                      >> /tmp/db-packages.txt
+
+              fi
+
+          done
+
+
+          ##################################################
+          # READ RELEASE
+          ##################################################
+
+          : > /tmp/release-packages.txt
+
+
+          shopt -s nullglob
+
+
+          for pkg in /work/release-packages/*.pkg.tar.zst; do
+
+              name="$(
+                  pacman -Qp \
+                      --print-format '%n' \
+                      "$pkg"
+              )"
+
+
+              version="$(
+                  pacman -Qp \
+                      --print-format '%v' \
+                      "$pkg"
+              )"
+
+
+              filename="$(basename "$pkg")"
+
+
+              printf '%s\t%s\t%s\n' \
+                  "$name" \
+                  "$version" \
+                  "$filename" \
+                  >> /tmp/release-packages.txt
+
+          done
+
+
+          ##################################################
+          # REMOVE PACKAGES NOT IN RELEASE
+          ##################################################
+
+          : > /tmp/remove.txt
+
+
+          echo
+          echo "=========================================="
+          echo "CHECKING DELETED PACKAGES"
+          echo "=========================================="
+
+
+          while IFS=$'\t' read -r name version filename; do
+
+              [ -n "$name" ] || continue
+
+
+              if ! awk -F '\t' \
+                  -v n="$name" \
+                  '$1 == n {found=1; exit} END {exit !found}' \
+                  /tmp/release-packages.txt
+              then
+
+                  echo "-> REMOVE: $name"
+                  echo "   $filename"
+
+
+                  echo "$name" \
+                      >> /tmp/remove.txt
+
+              else
+
+                  echo "-> KEEP:   $name"
+
+              fi
+
+          done < /tmp/db-packages.txt
+
+
+          ##################################################
+          # REMOVE FROM DATABASE
+          ##################################################
+
+          while IFS= read -r name; do
+
+              [ -n "$name" ] || continue
+
+
+              repo-remove \
+                  repo/methurepos.db.tar.gz \
+                  "$name"
+
+          done < /tmp/remove.txt
+
+
+          ##################################################
+          # DATABASE SYMLINK
+          ##################################################
+
+          rm -f repo/methurepos.db
+
+          ln -s \
+              methurepos.db.tar.gz \
+              repo/methurepos.db
+
+
+          echo
+          echo "=========================================="
+          echo "REMOVAL COMPLETE"
+          echo "=========================================="
+
+
+          if [ -s /tmp/remove.txt ]; then
+
+              cat /tmp/remove.txt
+
+          else
+
+              echo "Nothing to remove."
+
+          fi
+
+
+          EOF
+
+
+      - name: Upload updated database
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+
+          gh release delete-asset mr \
+            methurepos.db.tar.gz \
+            --repo Methusan105/archconfig \
+            --yes \
+            || true
+
+          gh release delete-asset mr \
+            methurepos.db \
+            --repo Methusan105/archconfig \
+            --yes \
+            || true
+
+
+          gh release upload mr \
+            repo/methurepos.db.tar.gz \
+            repo/methurepos.db \
+            --repo Methusan105/archconfig \
+            --clobber
+
+
+      - name: Summary
+        run: |
+          echo "=========================================="
+          echo "REMOVE COMPLETE"
+          echo "=========================================="
+
+          ls -lah repo/
