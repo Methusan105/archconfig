@@ -16,15 +16,15 @@ jobs:
       # CHECKOUT
       #################################################
 
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
 
       #################################################
-      # DOWNLOAD EXISTING REPO DATABASE
+      # DOWNLOAD EXISTING DATABASE
       #################################################
 
-      - name: Download existing repository database
+      - name: Download existing database
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -50,18 +50,14 @@ jobs:
 
 
       #################################################
-      # DOWNLOAD PACKAGE ASSETS
+      # GET RELEASE ASSETS
       #################################################
 
-      - name: Download packages from release
+      - name: Get current release package list
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -Eeuo pipefail
-
-          mkdir -p repo
-
-          echo "=== Getting package list from GitHub Release ==="
 
           gh release view mr \
             --repo Methusan105/archconfig \
@@ -69,76 +65,101 @@ jobs:
             --jq '.assets[].name' \
             > release-assets.txt
 
-          echo ""
-          echo "Release assets:"
-          cat release-assets.txt
-          echo ""
+          echo "=== Current release assets ==="
 
-          echo "=== Checking existing repository database ==="
+          cat release-assets.txt
+
+
+      #################################################
+      # DOWNLOAD ONLY PACKAGES THAT ARE NEEDED
+      #################################################
+
+      - name: Download required packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+
+          echo "=== Determining packages ==="
+
+          touch existing-db-packages.txt
+          touch release-packages.txt
+
+          #################################################
+          # PACKAGES IN RELEASE
+          #################################################
+
+          grep '\.pkg\.tar\.zst$' release-assets.txt \
+            | sort \
+            > release-packages.txt || true
+
+          echo ""
+          echo "Packages in release:"
+          cat release-packages.txt || true
+
+
+          #################################################
+          # PACKAGES IN EXISTING DB
+          #################################################
 
           if [ -f repo/methurepos.db.tar.gz ]; then
+
+              echo ""
+              echo "Reading existing database..."
+
               tar -xOf repo/methurepos.db.tar.gz \
-                  --wildcards '*/desc' 2>/dev/null \
-                  | grep '^%FILENAME%' -A1 \
-                  | grep '\.pkg\.tar\.zst$' \
-                  | sort -u \
-                  > existing-packages.txt || true
-          else
-              touch existing-packages.txt
+                --wildcards '*/desc' 2>/dev/null \
+                | awk '
+                  /^%FILENAME%$/ {
+                    getline
+                    print
+                  }
+                ' \
+                | sort \
+                > existing-db-packages.txt || true
+
           fi
 
           echo ""
-          echo "Packages already in database:"
-          cat existing-packages.txt || true
+          echo "Packages in existing DB:"
+          cat existing-db-packages.txt || true
+
+
+          #################################################
+          # DOWNLOAD NEW / REPLACED PACKAGES
+          #################################################
+
           echo ""
+          echo "=== Checking packages ==="
 
-          echo "=== Downloading only new packages ==="
+          while IFS= read -r pkg; do
 
-          while IFS= read -r package; do
+              [ -z "$pkg" ] && continue
 
-              [ -z "$package" ] && continue
+              if grep -Fxq "$pkg" existing-db-packages.txt; then
 
-              # Ignore repository database files
-              case "$package" in
-                  *.db|*.db.tar.gz|*.files|*.files.tar.gz)
-                      continue
-                      ;;
-              esac
+                  echo "UNCHANGED: $pkg"
 
-              # Only process Arch packages
-              case "$package" in
-                  *.pkg.tar.zst)
-                      ;;
-                  *)
-                      continue
-                      ;;
-              esac
+              else
 
-              if grep -Fxq "$package" existing-packages.txt; then
-                  echo "SKIP: $package"
-                  continue
+                  echo "NEEDED: $pkg"
+
+                  gh release download mr \
+                    --repo Methusan105/archconfig \
+                    --pattern "$pkg" \
+                    --dir repo \
+                    --clobber
+
               fi
 
-              echo "NEW: $package"
-
-              gh release download mr \
-                  --repo Methusan105/archconfig \
-                  --pattern "$package" \
-                  --dir repo \
-                  --clobber
-
-          done < release-assets.txt
-
-          echo ""
-          echo "=== Repository directory ==="
-          ls -lah repo
+          done < release-packages.txt
 
 
       #################################################
       # UPDATE DATABASE
       #################################################
 
-      - name: Update repository database
+      - name: Synchronize repository database
         run: |
           set -Eeuo pipefail
 
@@ -146,34 +167,102 @@ jobs:
             -v "$PWD/repo:/repo" \
             archlinux:latest \
             bash -c '
+
               set -Eeuo pipefail
 
               cd /repo
 
               pacman -Sy --noconfirm pacman-contrib
 
-              echo "=== Package files ==="
 
-              ls -1 *.pkg.tar.zst 2>/dev/null || true
+              #################################################
+              # CREATE DATABASE IF MISSING
+              #################################################
 
-              echo ""
-              echo "=== Updating repository database ==="
-
-              # If no database exists, create one from all packages
               if [ ! -f methurepos.db.tar.gz ]; then
 
-                  echo "No existing database found."
-                  echo "Creating new database..."
+                  echo "No existing database."
 
-                  repo-add methurepos.db.tar.gz \
-                    ./*.pkg.tar.zst
+                  if compgen -G "*.pkg.tar.zst" > /dev/null; then
+
+                      repo-add methurepos.db.tar.gz \
+                        ./*.pkg.tar.zst
+
+                  else
+
+                      echo "ERROR: No packages found."
+                      exit 1
+
+                  fi
 
               else
 
-                  # Find packages that are not represented in the DB
-                  rm -f new-packages.txt
+                  #################################################
+                  # CREATE LIST OF CURRENT DB PACKAGES
+                  #################################################
 
-                  touch new-packages.txt
+                  tar -xOf methurepos.db.tar.gz \
+                    --wildcards "*/desc" 2>/dev/null \
+                    | awk "
+                      /^%FILENAME%$/ {
+                        getline
+                        print
+                      }
+                    " \
+                    | sort \
+                    > db-packages.txt || true
+
+
+                  #################################################
+                  # RELEASE PACKAGE LIST
+                  #################################################
+
+                  find . \
+                    -maxdepth 1 \
+                    -type f \
+                    -name "*.pkg.tar.zst" \
+                    -printf "%f\n" \
+                    | sort \
+                    > local-packages.txt
+
+
+                  #################################################
+                  # REMOVE PACKAGES NO LONGER IN RELEASE
+                  #################################################
+
+                  echo ""
+                  echo "=== Checking for deleted packages ==="
+
+                  while IFS= read -r oldpkg; do
+
+                      [ -z "$oldpkg" ] && continue
+
+                      if ! grep -Fxq "$oldpkg" local-packages.txt; then
+
+                          echo "Removing old package: $oldpkg"
+
+                          pkgname="$(
+                              echo "$oldpkg" |
+                              sed -E "s/-[0-9][^-]*-[0-9]+-x86_64\.pkg\.tar\.zst$//"
+                          )"
+
+                          echo "Package name: $pkgname"
+
+                          repo-remove \
+                            methurepos.db.tar.gz \
+                            "$pkgname" || true
+
+                      fi
+
+                  done < db-packages.txt
+
+
+                  #################################################
+                  # ADD NEW PACKAGES
+                  #################################################
+
+                  echo ""
+                  echo "=== Adding new packages ==="
 
                   for pkg in ./*.pkg.tar.zst; do
 
@@ -181,50 +270,59 @@ jobs:
 
                       filename="$(basename "$pkg")"
 
-                      if tar -xOf methurepos.db.tar.gz \
-                          --wildcards "*/desc" 2>/dev/null |
-                          grep -Fqx "$filename"; then
+                      if grep -Fxq "$filename" db-packages.txt; then
 
-                          echo "Already in DB: $filename"
+                          echo "Already present: $filename"
 
                       else
 
                           echo "Adding: $filename"
-                          echo "$pkg" >> new-packages.txt
+
+                          repo-add \
+                            methurepos.db.tar.gz \
+                            "$pkg"
 
                       fi
 
                   done
 
-                  if [ -s new-packages.txt ]; then
 
-                      echo ""
-                      echo "=== Adding new packages ==="
+                  #################################################
+                  # REBUILD FILES DATABASE
+                  #################################################
 
-                      repo-add methurepos.db.tar.gz \
-                        $(cat new-packages.txt)
+                  echo ""
+                  echo "=== Rebuilding files database ==="
 
-                  else
+                  if compgen -G "*.pkg.tar.zst" > /dev/null; then
 
-                      echo ""
-                      echo "No new packages."
+                      repo-add \
+                        --files \
+                        methurepos.db.tar.gz \
+                        ./*.pkg.tar.zst
 
                   fi
 
               fi
 
+
+              #################################################
+              # OUTPUT
+              #################################################
+
               echo ""
-              echo "=== Database created ==="
+              echo "=== Final repository ==="
 
               ls -lah methurepos*
+
             '
 
 
       #################################################
-      # CREATE REGULAR .db / .files COPIES
+      # CREATE NON-SYMLINK DATABASE FILES
       #################################################
 
-      - name: Create regular database files
+      - name: Prepare database assets
         run: |
           set -Eeuo pipefail
 
@@ -233,28 +331,58 @@ jobs:
           rm -f methurepos.db
           rm -f methurepos.files
 
-          cp -L methurepos.db.tar.gz methurepos.db
+          cp -L \
+            methurepos.db.tar.gz \
+            methurepos.db
 
           if [ -f methurepos.files.tar.gz ]; then
-              cp -L methurepos.files.tar.gz methurepos.files
+              cp -L \
+                methurepos.files.tar.gz \
+                methurepos.files
           fi
 
-          echo "=== Final database files ==="
+          echo "=== Database assets ==="
 
           ls -lah methurepos*
 
 
       #################################################
-      # UPLOAD UPDATED DATABASE
+      # REMOVE OLD DATABASE ASSETS
       #################################################
 
-      - name: Upload updated repository database
+      - name: Remove old database assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -Eeuo pipefail
 
-          echo "=== Uploading updated database ==="
+          echo "=== Removing old repository database assets ==="
+
+          for asset in \
+            methurepos.db \
+            methurepos.db.tar.gz \
+            methurepos.files \
+            methurepos.files.tar.gz
+          do
+
+              gh release delete-asset mr \
+                "$asset" \
+                --repo Methusan105/archconfig \
+                --yes \
+                || true
+
+          done
+
+
+      #################################################
+      # UPLOAD NEW DATABASE
+      #################################################
+
+      - name: Upload updated database
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
 
           gh release upload mr \
             repo/methurepos.db \
@@ -266,10 +394,54 @@ jobs:
 
 
       #################################################
+      # CLEAN DELETED PACKAGE ASSETS
+      #################################################
+
+      - name: Remove deleted package assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+
+          gh release view mr \
+            --repo Methusan105/archconfig \
+            --json assets \
+            --jq '.assets[].name' \
+            > final-assets.txt
+
+          echo "=== Checking package assets ==="
+
+          while IFS= read -r asset; do
+
+              [ -z "$asset" ] && continue
+
+              case "$asset" in
+                  *.pkg.tar.zst)
+                      ;;
+                  *)
+                      continue
+                      ;;
+              esac
+
+              if ! grep -Fxq "$asset" release-packages.txt; then
+
+                  echo "Deleting obsolete package asset: $asset"
+
+                  gh release delete-asset mr \
+                    "$asset" \
+                    --repo Methusan105/archconfig \
+                    --yes
+
+              fi
+
+          done < final-assets.txt
+
+
+      #################################################
       # UPLOAD NEW PACKAGES
       #################################################
 
-      - name: Upload new packages
+      - name: Upload package assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -277,7 +449,7 @@ jobs:
 
           cd repo
 
-          echo "=== Finding packages ==="
+          echo "=== Uploading packages ==="
 
           for pkg in *.pkg.tar.zst; do
 
@@ -292,7 +464,18 @@ jobs:
 
           done
 
+
+      #################################################
+      # COMPLETE
+      #################################################
+
+      - name: Complete
+        run: |
           echo ""
-          echo "====================================="
-          echo " MethuRepo update complete"
-          echo "====================================="
+          echo "=============================================="
+          echo " MethuRepo successfully synchronized"
+          echo "=============================================="
+          echo ""
+          echo "Release: mr"
+          echo "Database: methurepos.db.tar.gz"
+          echo ""
