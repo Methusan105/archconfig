@@ -133,10 +133,12 @@ jobs:
               repo-remove repo/methurepos.db.tar.gz "$name"
           done < work/remove_names.txt
 
-          # Maintain physical file copy instead of relative symlinks
+          # Unlink/Remove the symlink created by repo-remove before copying
+          rm -f repo/methurepos.db
           cp -f repo/methurepos.db.tar.gz repo/methurepos.db
 
           if [ -f repo/methurepos.files.tar.gz ]; then
+              rm -f repo/methurepos.files
               cp -f repo/methurepos.files.tar.gz repo/methurepos.files 2>/dev/null || true
           fi
 
