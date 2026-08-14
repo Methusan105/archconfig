@@ -274,10 +274,10 @@ jobs:
               filename="$(basename "$pkg")"
 
 
-              name="$(pkginfo -p "$pkg" -f "%n")"
-
-
-              version="$(pkginfo -p "$pkg" -f "%v")"
+              # Extract Name and Version directly using standard pacman output
+              pkg_info="$(pacman -Qip "$pkg")"
+              name="$(echo "$pkg_info" | awk -F ': ' '/^Name/ {print $2}' | xargs)"
+              version="$(echo "$pkg_info" | awk -F ': ' '/^Version/ {print $2}' | xargs)"
 
 
               echo
