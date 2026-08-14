@@ -13,10 +13,10 @@ jobs:
     steps:
 
       ############################################################
-      # DOWNLOAD CURRENT REPOSITORY DATABASE
+      # DOWNLOAD CURRENT DATABASE
       ############################################################
 
-      - name: Download existing repository database
+      - name: Download current repository database
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -32,17 +32,17 @@ jobs:
             || true
 
           if [ -f repo/methurepos.db.tar.gz ]; then
-            echo "Existing methurepos database found."
+            echo "Existing repository database found."
           else
-            echo "No existing database. A new repository will be created."
+            echo "No existing database found."
           fi
 
 
       ############################################################
-      # GET ALL PACKAGE ASSETS FROM MR
+      # READ MR RELEASE
       ############################################################
 
-      - name: Read mr release
+      - name: Read mr release packages
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -57,161 +57,180 @@ jobs:
             > release-packages.txt \
             || true
 
-          echo ""
+          echo
           echo "=========================================="
-          echo "Packages in mr"
+          echo "PACKAGES IN MR RELEASE"
           echo "=========================================="
 
           cat release-packages.txt || true
 
 
       ############################################################
-      # READ THE REAL ARCH DATABASE
+      # CREATE ARCH DATABASE METADATA
       ############################################################
 
-      - name: Read existing Arch repository database
+      - name: Read existing database
         run: |
           set -Eeuo pipefail
+
+          if [ ! -f repo/methurepos.db.tar.gz ]; then
+
+            echo "No database exists."
+
+            : > db-packages.txt
+
+          else
+
+            docker run --rm \
+              -v "$PWD:/work" \
+              archlinux:latest \
+              bash <<'CONTAINER'
+
+          set -Eeuo pipefail
+
+          cd /work
+
+          pacman -Sy --noconfirm pacman-contrib
+
+          rm -rf /tmp/methurepos-db
+          mkdir -p /tmp/methurepos-db
+
+          bsdtar \
+            -xzf repo/methurepos.db.tar.gz \
+            -C /tmp/methurepos-db
+
+          : > db-packages.txt
+
+          for desc in /tmp/methurepos-db/*/desc; do
+
+            [ -f "$desc" ] || continue
+
+            name=""
+            version=""
+            filename=""
+
+            while IFS= read -r line; do
+
+              case "$line" in
+
+                "%NAME%")
+                  read -r name
+                  ;;
+
+                "%VERSION%")
+                  read -r version
+                  ;;
+
+                "%FILENAME%")
+                  read -r filename
+                  ;;
+
+              esac
+
+            done < "$desc"
+
+            if [ -n "$name" ] && [ -n "$version" ]; then
+
+              printf '%s\t%s\t%s\n' \
+                "$name" \
+                "$version" \
+                "$filename" \
+                >> db-packages.txt
+
+            fi
+
+          done
+
+          sort -u db-packages.txt -o db-packages.txt
+
+          echo
+          echo "=========================================="
+          echo "PACKAGES IN EXISTING DATABASE"
+          echo "=========================================="
+
+          cat db-packages.txt || true
+
+          CONTAINER
+
+          fi
+
+
+      ############################################################
+      # CONVERT RELEASE FILENAMES TO PACKAGE METADATA
+      ############################################################
+
+      - name: Read release package metadata
+        run: |
+          set -Eeuo pipefail
+
+          : > release-metadata.txt
 
           docker run --rm \
             -v "$PWD:/work" \
             archlinux:latest \
-            bash -c '
+            bash <<'CONTAINER'
 
-              set -Eeuo pipefail
+          set -Eeuo pipefail
 
-              cd /work
+          cd /work
 
-              pacman -Sy --noconfirm pacman-contrib
+          pacman -Sy --noconfirm pacman-contrib
 
+          while IFS= read -r filename; do
 
-              ####################################################
-              # CREATE EMPTY DATABASE IF NECESSARY
-              ####################################################
+            [ -n "$filename" ] || continue
 
-              if [ ! -f repo/methurepos.db.tar.gz ]; then
+            echo
+            echo "Reading: $filename"
 
-                echo "Creating empty repository database..."
+            pkgname="$(
+              pacman -Qp \
+                --print-format '%n' \
+                "$filename" \
+                2>/dev/null \
+                || true
+            )"
 
-                mkdir -p /tmp/emptyrepo
+            pkgver="$(
+              pacman -Qp \
+                --print-format '%v' \
+                "$filename" \
+                2>/dev/null \
+                || true
+            )"
 
-                repo-add \
-                  /tmp/emptyrepo/methurepos.db.tar.gz
+            if [ -n "$pkgname" ] && [ -n "$pkgver" ]; then
 
-                cp \
-                  /tmp/emptyrepo/methurepos.db.tar.gz \
-                  repo/methurepos.db.tar.gz
+              printf '%s\t%s\t%s\n' \
+                "$pkgname" \
+                "$pkgver" \
+                "$filename" \
+                >> /work/release-metadata.txt
 
-              fi
+            fi
 
+          done < /work/release-packages.txt
 
-              ####################################################
-              # LOCAL PACMAN REPOSITORY
-              ####################################################
+          sort -u \
+            /work/release-metadata.txt \
+            -o /work/release-metadata.txt
 
-              mkdir -p /tmp/methurepos
-              mkdir -p /tmp/pacmandb
-              mkdir -p /tmp/cache
-
-
-              cp \
-                repo/methurepos.db.tar.gz \
-                /tmp/methurepos/methurepos.db.tar.gz
-
-
-              cat > /tmp/pacman.conf <<EOF
-              [options]
-              Architecture = x86_64
-              SigLevel = Never
-              DBPath = /tmp/pacmandb
-              CacheDir = /tmp/cache
-
-              [methurepos]
-              SigLevel = Never
-              Server = file:///tmp/methurepos
-              EOF
+          CONTAINER
 
 
-              ####################################################
-              # LOAD DATABASE USING PACMAN
-              ####################################################
+          echo
+          echo "=========================================="
+          echo "RELEASE METADATA"
+          echo "=========================================="
 
-              pacman \
-                --config /tmp/pacman.conf \
-                -Sy
-
-
-              ####################################################
-              # GET PACKAGE LIST
-              ####################################################
-
-              pacman \
-                --config /tmp/pacman.conf \
-                -Sl methurepos \
-                > /work/db-packages.txt
-
-
-              echo ""
-              echo "=========================================="
-              echo "Packages currently in database"
-              echo "=========================================="
-
-              cat /work/db-packages.txt || true
-
-
-              ####################################################
-              # GET ACTUAL PACKAGE FILENAMES FROM PACMAN
-              ####################################################
-
-              : > /work/db-package-files.txt
-
-
-              while read -r repo package version; do
-
-                [ -z "${package:-}" ] && continue
-
-
-                filename="$(
-                  pacman \
-                    --config /tmp/pacman.conf \
-                    -Si "$package" \
-                    2>/dev/null |
-                  awk -F': ' \
-                    '/^Filename/ {
-                      print $2
-                      exit
-                    }'
-                )"
-
-
-                if [ -n "$filename" ]; then
-
-                  printf '%s\t%s\t%s\n' \
-                    "$package" \
-                    "$version" \
-                    "$filename" \
-                    >> /work/db-package-files.txt
-
-                fi
-
-              done < /work/db-packages.txt
-
-
-              echo ""
-              echo "=========================================="
-              echo "Database package metadata"
-              echo "=========================================="
-
-              cat /work/db-package-files.txt || true
-
-            '
+          cat release-metadata.txt || true
 
 
       ############################################################
-      # COMPARE RELEASE AGAINST DATABASE
+      # COMPARE
       ############################################################
 
-      - name: Compare release with database
+      - name: Compare repository and release
         run: |
           set -Eeuo pipefail
 
@@ -219,130 +238,109 @@ jobs:
           : > packages-to-remove.txt
 
 
-          echo ""
+          echo
           echo "=========================================="
-          echo "COMPARING RELEASE WITH DATABASE"
+          echo "COMPARISON"
           echo "=========================================="
 
 
           ########################################################
-          # EXACT UNCHANGED MATCH
+          # RELEASE -> DATABASE
           #
-          # If the exact filename exists in the DB, the package
-          # is unchanged. No download required.
+          # Determine:
+          #
+          # NEW
+          # UPDATED
+          # UNCHANGED
           ########################################################
 
-          while IFS= read -r release_file; do
+          while IFS=$'\t' read -r release_name release_version release_filename; do
 
-            [ -z "$release_file" ] && continue
+            [ -n "$release_name" ] || continue
+
+            db_line="$(
+              awk -F '\t' \
+                -v name="$release_name" \
+                '$1 == name { print; exit }' \
+                db-packages.txt
+            )"
 
 
-            if grep -F -q \
-              $'\t'"$release_file"$ \
-              db-package-files.txt 2>/dev/null
-            then
+            if [ -z "$db_line" ]; then
 
-              echo "UNCHANGED: $release_file"
+              echo "$release_filename"
+              echo "Package: $release_name"
+              echo "-> NEW"
 
-            else
-
-              echo "NEW/UPDATED: $release_file"
-
-              echo "$release_file" \
+              echo "$release_filename" \
                 >> packages-to-download.txt
+
+              continue
 
             fi
 
-          done < release-packages.txt
+
+            db_name="$(printf '%s\n' "$db_line" | cut -f1)"
+            db_version="$(printf '%s\n' "$db_line" | cut -f2)"
+            db_filename="$(printf '%s\n' "$db_line" | cut -f3)"
+
+
+            if [ "$db_filename" = "$release_filename" ]; then
+
+              echo "$release_filename"
+              echo "Package: $release_name"
+              echo "-> UNCHANGED"
+
+            else
+
+              echo "$release_filename"
+              echo "Package: $release_name"
+              echo "-> UPDATED"
+              echo "Old: $db_filename"
+              echo "New: $release_filename"
+
+              echo "$release_filename" \
+                >> packages-to-download.txt
+
+              echo "$release_name" \
+                >> packages-to-remove.txt
+
+            fi
+
+          done < release-metadata.txt
 
 
           ########################################################
-          # FIND PACKAGES THAT WERE REPLACED
+          # DATABASE -> RELEASE
           #
-          # We need to remove the old package if the same package
-          # exists with a different version/filename.
+          # Find packages that have been removed from mr.
           ########################################################
 
-          echo ""
+          echo
           echo "=========================================="
-          echo "Checking replaced packages"
+          echo "CHECKING DELETED PACKAGES"
           echo "=========================================="
 
 
           while IFS=$'\t' read -r db_name db_version db_filename; do
 
-            [ -z "$db_name" ] && continue
+            [ -n "$db_name" ] || continue
 
 
-            found=false
-
-
-            ######################################################
-            # Search release filenames for the same package name.
-            #
-            # We only need the package-name part here because the
-            # DB gives us the authoritative old filename.
-            ######################################################
-
-            while IFS= read -r release_file; do
-
-              [ -z "$release_file" ] && continue
-
-
-              release_base="${release_file%.pkg.tar.zst}"
-
-
-              ####################################################
-              # Compare against DB package name.
-              #
-              # Arch package names can contain '-'.
-              # The safest way here is to test whether the DB
-              # package name is the prefix followed by '-'.
-              ####################################################
-
-              case "$release_base" in
-
-                "$db_name"-*)
-
-                  found=true
-                  break
-                  ;;
-
-              esac
-
-            done < release-packages.txt
-
-
-            if [ "$found" = false ]; then
+            if ! awk -F '\t' \
+              -v name="$db_name" \
+              '$1 == name { found=1; exit } END { exit !found }' \
+              release-metadata.txt
+            then
 
               echo "DELETED: $db_name"
 
               echo "$db_name" \
                 >> packages-to-remove.txt
 
-            else
-
-              ####################################################
-              # Same package exists in release, but exact filename
-              # wasn't found. Therefore it is an update.
-              ####################################################
-
-              if ! grep -F -q \
-                $'\t'"$db_filename"$ \
-                release-packages.txt 2>/dev/null
-              then
-
-                echo "REPLACED: $db_name"
-                echo "  old: $db_filename"
-
-                echo "$db_name" \
-                  >> packages-to-remove.txt
-
-              fi
-
             fi
 
-          done < db-package-files.txt
+          done < db-packages.txt
 
 
           ########################################################
@@ -353,34 +351,29 @@ jobs:
             packages-to-download.txt \
             -o packages-to-download.txt
 
-
           sort -u \
             packages-to-remove.txt \
             -o packages-to-remove.txt
 
 
-          ########################################################
-          # SUMMARY
-          ########################################################
-
-          echo ""
+          echo
           echo "=========================================="
-          echo "PACKAGES TO DOWNLOAD"
+          echo "DOWNLOAD"
           echo "=========================================="
 
           cat packages-to-download.txt || true
 
 
-          echo ""
+          echo
           echo "=========================================="
-          echo "PACKAGES TO REMOVE"
+          echo "REMOVE"
           echo "=========================================="
 
           cat packages-to-remove.txt || true
 
 
       ############################################################
-      # DOWNLOAD ONLY NEW/UPDATED PACKAGES
+      # DOWNLOAD ONLY NEW / UPDATED PACKAGES
       ############################################################
 
       - name: Download changed packages
@@ -391,11 +384,10 @@ jobs:
 
           while IFS= read -r package; do
 
-            [ -z "$package" ] && continue
+            [ -n "$package" ] || continue
 
-            echo ""
-            echo "Downloading:"
-            echo "$package"
+            echo
+            echo "Downloading: $package"
 
             gh release download mr \
               --repo Methusan105/archconfig \
@@ -407,189 +399,210 @@ jobs:
 
 
       ############################################################
-      # UPDATE ARCH DATABASE
+      # UPDATE DATABASE
       ############################################################
 
-      - name: Update repository
+      - name: Update repository database
         run: |
           set -Eeuo pipefail
 
           docker run --rm \
             -v "$PWD:/work" \
             archlinux:latest \
-            bash -c '
+            bash <<'CONTAINER'
 
-              set -Eeuo pipefail
+          set -Eeuo pipefail
 
-              cd /work
+          cd /work
 
-              pacman -Sy --noconfirm pacman-contrib
-
-
-              ####################################################
-              # REMOVE OLD / DELETED PACKAGES
-              ####################################################
-
-              echo ""
-              echo "=========================================="
-              echo "Removing old packages"
-              echo "=========================================="
+          pacman -Sy --noconfirm pacman-contrib
 
 
-              if [ -f packages-to-remove.txt ]; then
+          ########################################################
+          # CREATE DATABASE IF IT DOES NOT EXIST
+          ########################################################
 
-                while IFS= read -r package; do
+          if [ ! -f repo/methurepos.db.tar.gz ]; then
 
-                  [ -z "$package" ] && continue
+            echo "Creating new repository database."
 
-                  echo "Removing: $package"
+            mkdir -p /tmp/empty-repo
 
-                  repo-remove \
-                    repo/methurepos.db.tar.gz \
-                    "$package"
+            repo-add \
+              /tmp/empty-repo/methurepos.db.tar.gz
 
-                done < packages-to-remove.txt
+            cp \
+              /tmp/empty-repo/methurepos.db.tar.gz \
+              repo/methurepos.db.tar.gz
 
-              fi
-
-
-              ####################################################
-              # ADD NEW / UPDATED PACKAGES
-              ####################################################
-
-              echo ""
-              echo "=========================================="
-              echo "Adding packages"
-              echo "=========================================="
+          fi
 
 
-              for package in packages/*.pkg.tar.zst; do
+          ########################################################
+          # REMOVE OLD / DELETED PACKAGES
+          ########################################################
 
-                [ -f "$package" ] || continue
+          if [ -s packages-to-remove.txt ]; then
 
-                echo "Adding:"
-                echo "$package"
+            while IFS= read -r package; do
 
-                repo-add \
-                  repo/methurepos.db.tar.gz \
-                  "$package"
+              [ -n "$package" ] || continue
 
-              done
+              echo
+              echo "Removing from repository: $package"
 
-
-              ####################################################
-              # RECREATE DB SYMLINK
-              ####################################################
-
-              rm -f repo/methurepos.db
-
-              ln -s \
-                methurepos.db.tar.gz \
-                repo/methurepos.db
-
-
-              ####################################################
-              # REBUILD FILES DATABASE
-              ####################################################
-
-              rm -f \
-                repo/methurepos.files \
-                repo/methurepos.files.tar.gz
-
-
-              repo-add \
-                --files \
+              repo-remove \
                 repo/methurepos.db.tar.gz \
-                packages/*.pkg.tar.zst \
-                2>/dev/null \
-                || true
+                "$package"
+
+            done < packages-to-remove.txt
+
+          fi
 
 
-              ####################################################
-              # FIX FILES SYMLINK
-              ####################################################
+          ########################################################
+          # ADD NEW / UPDATED PACKAGES
+          ########################################################
 
-              if [ -f repo/methurepos.files.tar.gz ]; then
+          shopt -s nullglob
 
-                rm -f repo/methurepos.files
+          packages=(packages/*.pkg.tar.zst)
 
-                ln -s \
-                  methurepos.files.tar.gz \
-                  repo/methurepos.files
+          if [ "${#packages[@]}" -gt 0 ]; then
 
-              fi
+            echo
+            echo "Adding packages..."
+
+            repo-add \
+              repo/methurepos.db.tar.gz \
+              "${packages[@]}"
+
+          else
+
+            echo "No packages need to be added."
+
+          fi
 
 
-              echo ""
-              echo "=========================================="
-              echo "FINAL REPOSITORY"
-              echo "=========================================="
+          ########################################################
+          # DATABASE SYMLINK
+          ########################################################
 
-              ls -lah repo/
+          rm -f repo/methurepos.db
 
-            '
+          ln -s \
+            methurepos.db.tar.gz \
+            repo/methurepos.db
+
+
+          ########################################################
+          # CLEAN OLD FILES DATABASE
+          ########################################################
+
+          rm -f \
+            repo/methurepos.files \
+            repo/methurepos.files.tar.gz
+
+
+          ########################################################
+          # CREATE FILES DATABASE
+          ########################################################
+
+          if [ "${#packages[@]}" -gt 0 ]; then
+
+            repo-add \
+              --files \
+              repo/methurepos.db.tar.gz \
+              "${packages[@]}" \
+              || true
+
+          fi
+
+
+          ########################################################
+          # FILES SYMLINK
+          ########################################################
+
+          if [ -f repo/methurepos.files.tar.gz ]; then
+
+            rm -f repo/methurepos.files
+
+            ln -s \
+              methurepos.files.tar.gz \
+              repo/methurepos.files
+
+          fi
+
+
+          echo
+          echo "=========================================="
+          echo "FINAL REPOSITORY"
+          echo "=========================================="
+
+          ls -lah repo/
+
+          CONTAINER
 
 
       ############################################################
-      # VERIFY DATABASE
+      # VERIFY
       ############################################################
 
-      - name: Verify final database
+      - name: Verify repository
         run: |
           set -Eeuo pipefail
 
           docker run --rm \
             -v "$PWD:/work" \
             archlinux:latest \
-            bash -c '
+            bash <<'CONTAINER'
 
-              set -Eeuo pipefail
+          set -Eeuo pipefail
 
-              cd /work
+          cd /work
 
-              mkdir -p /tmp/repo
-              mkdir -p /tmp/db
-              mkdir -p /tmp/cache
+          mkdir -p /tmp/repo
+          mkdir -p /tmp/db
+          mkdir -p /tmp/cache
 
-
-              cp \
-                repo/methurepos.db.tar.gz \
-                /tmp/repo/methurepos.db.tar.gz
-
-
-              cat > /tmp/pacman.conf <<EOF
-              [options]
-              Architecture = x86_64
-              SigLevel = Never
-              DBPath = /tmp/db
-              CacheDir = /tmp/cache
-
-              [methurepos]
-              SigLevel = Never
-              Server = file:///tmp/repo
-              EOF
+          cp \
+            repo/methurepos.db.tar.gz \
+            /tmp/repo/methurepos.db.tar.gz
 
 
-              pacman \
-                --config /tmp/pacman.conf \
-                -Sy
+          cat > /tmp/pacman.conf <<EOF
+          [options]
+          Architecture = x86_64
+          SigLevel = Never
+          DBPath = /tmp/db
+          CacheDir = /tmp/cache
+
+          [methurepos]
+          SigLevel = Never
+          Server = file:///tmp/repo
+          EOF
 
 
-              echo ""
-              echo "=========================================="
-              echo "FINAL PACMAN REPOSITORY"
-              echo "=========================================="
+          pacman \
+            --config /tmp/pacman.conf \
+            -Sy
 
 
-              pacman \
-                --config /tmp/pacman.conf \
-                -Sl methurepos
+          echo
+          echo "=========================================="
+          echo "FINAL PACMAN DATABASE"
+          echo "=========================================="
 
-            '
+
+          pacman \
+            --config /tmp/pacman.conf \
+            -Sl methurepos
+
+          CONTAINER
 
 
       ############################################################
-      # DELETE OLD RELEASE DATABASE
+      # DELETE OLD DATABASE ASSETS FROM GITHUB RELEASE
       ############################################################
 
       - name: Delete old database assets
@@ -598,32 +611,20 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          gh release delete-asset mr \
+          for asset in \
             methurepos.db \
-            --repo Methusan105/archconfig \
-            --yes \
-            || true
-
-
-          gh release delete-asset mr \
             methurepos.db.tar.gz \
-            --repo Methusan105/archconfig \
-            --yes \
-            || true
-
-
-          gh release delete-asset mr \
             methurepos.files \
-            --repo Methusan105/archconfig \
-            --yes \
-            || true
+            methurepos.files.tar.gz
+          do
 
+            gh release delete-asset mr \
+              "$asset" \
+              --repo Methusan105/archconfig \
+              --yes \
+              || true
 
-          gh release delete-asset mr \
-            methurepos.files.tar.gz \
-            --repo Methusan105/archconfig \
-            --yes \
-            || true
+          done
 
 
       ############################################################
@@ -643,7 +644,7 @@ jobs:
             --clobber
 
 
-          if [ -e repo/methurepos.files.tar.gz ]; then
+          if [ -f repo/methurepos.files.tar.gz ]; then
 
             gh release upload mr \
               repo/methurepos.files.tar.gz \
@@ -660,19 +661,19 @@ jobs:
 
       - name: Summary
         run: |
-          echo ""
+          echo
           echo "=========================================="
-          echo "       METHUREPOS UPDATE COMPLETE"
+          echo "METHUREPOS UPDATE COMPLETE"
           echo "=========================================="
 
-          echo ""
+          echo
           echo "Downloaded:"
           cat packages-to-download.txt || true
 
-          echo ""
+          echo
           echo "Removed:"
           cat packages-to-remove.txt || true
 
-          echo ""
-          echo "Repository files:"
+          echo
+          echo "Repository:"
           ls -lah repo/
