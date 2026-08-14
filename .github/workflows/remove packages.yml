@@ -12,6 +12,10 @@ jobs:
 
     steps:
 
+      # ============================================================
+      # DOWNLOAD CURRENT REPOSITORY DATABASE
+      # ============================================================
+
       - name: Download current repository database
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -20,12 +24,19 @@ jobs:
 
           mkdir -p repo
 
-          gh release download mr \
+          if gh release download mr \
             --repo Methusan105/archconfig \
-            --pattern 'methurepos.db.tar.gz' \
+            --pattern 'methurepos.db*' \
             --dir repo \
-            --clobber
+            --clobber; then
+              echo "Database files downloaded."
+          else
+              echo "No database found in release."
+          fi
 
+      # ============================================================
+      # DOWNLOAD CURRENT PACKAGES
+      # ============================================================
 
       - name: Download current mr packages
         env:
@@ -39,8 +50,11 @@ jobs:
             --repo Methusan105/archconfig \
             --pattern '*.pkg.tar.zst' \
             --dir release-packages \
-            --clobber
+            --clobber || true
 
+      # ============================================================
+      # FIND AND REMOVE DELETED PACKAGES (DOCKER)
+      # ============================================================
 
       - name: Find and remove deleted packages
         run: |
@@ -55,193 +69,131 @@ jobs:
 
           cd /work
 
-          pacman -Sy --noconfirm pacman-contrib
-
+          pacman -Sy --noconfirm pacman-contrib libarchive
 
           ##################################################
           # READ DATABASE
           ##################################################
 
           rm -rf /tmp/methurepos-db
-
           mkdir -p /tmp/methurepos-db
+
+          if [ ! -f repo/methurepos.db.tar.gz ]; then
+              echo "No database file found at repo/methurepos.db.tar.gz. Exiting."
+              exit 0
+          fi
 
           bsdtar \
               -xzf repo/methurepos.db.tar.gz \
-              -C /tmp/methurepos-db
-
+              -C /tmp/methurepos-db 2>/dev/null || true
 
           : > /tmp/db-packages.txt
 
-
           for desc in /tmp/methurepos-db/*/desc; do
-
               [ -f "$desc" ] || continue
-
 
               name=""
               version=""
               filename=""
 
-
               while IFS= read -r line; do
-
                   case "$line" in
-
-                      "%NAME%")
-                          IFS= read -r name
-                          ;;
-
-                      "%VERSION%")
-                          IFS= read -r version
-                          ;;
-
-                      "%FILENAME%")
-                          IFS= read -r filename
-                          ;;
-
+                      "%NAME%")     IFS= read -r name ;;
+                      "%VERSION%")  IFS= read -r version ;;
+                      "%FILENAME%") IFS= read -r filename ;;
                   esac
-
               done < "$desc"
 
-
               if [ -n "$name" ]; then
-
                   printf '%s\t%s\t%s\n' \
                       "$name" \
                       "$version" \
                       "$filename" \
                       >> /tmp/db-packages.txt
-
               fi
-
           done
 
-
           ##################################################
-          # READ RELEASE
+          # READ RELEASE PACKAGES
           ##################################################
 
           : > /tmp/release-packages.txt
-
-
           shopt -s nullglob
 
-
           for pkg in /work/release-packages/*.pkg.tar.zst; do
-
-              name="$(
-                  pacman -Qp \
-                      --print-format '%n' \
-                      "$pkg"
-              )"
-
-
-              version="$(
-                  pacman -Qp \
-                      --print-format '%v' \
-                      "$pkg"
-              )"
-
-
+              pkg_info="$(pacman -Qip "$pkg")"
+              name="$(echo "$pkg_info" | awk -F ': ' '/^Name/ {print $2}' | xargs)"
+              version="$(echo "$pkg_info" | awk -F ': ' '/^Version/ {print $2}' | xargs)"
               filename="$(basename "$pkg")"
-
 
               printf '%s\t%s\t%s\n' \
                   "$name" \
                   "$version" \
                   "$filename" \
                   >> /tmp/release-packages.txt
-
           done
 
-
           ##################################################
-          # REMOVE PACKAGES NOT IN RELEASE
+          # CHECK DELETED PACKAGES
           ##################################################
 
           : > /tmp/remove.txt
-
 
           echo
           echo "=========================================="
           echo "CHECKING DELETED PACKAGES"
           echo "=========================================="
 
-
           while IFS=$'\t' read -r name version filename; do
-
               [ -n "$name" ] || continue
-
 
               if ! awk -F '\t' \
                   -v n="$name" \
                   '$1 == n {found=1; exit} END {exit !found}' \
                   /tmp/release-packages.txt
               then
-
-                  echo "-> REMOVE: $name"
-                  echo "   $filename"
-
-
-                  echo "$name" \
-                      >> /tmp/remove.txt
-
+                  echo "-> REMOVE: $name ($filename)"
+                  echo "$name" >> /tmp/remove.txt
               else
-
                   echo "-> KEEP:   $name"
-
               fi
-
           done < /tmp/db-packages.txt
-
 
           ##################################################
           # REMOVE FROM DATABASE
           ##################################################
 
-          while IFS= read -r name; do
-
-              [ -n "$name" ] || continue
-
-
-              repo-remove \
-                  repo/methurepos.db.tar.gz \
-                  "$name"
-
-          done < /tmp/remove.txt
-
+          if [ ! -s /tmp/remove.txt ]; then
+              echo "Nothing to remove."
+          else
+              while IFS= read -r name; do
+                  [ -n "$name" ] || continue
+                  repo-remove \
+                      repo/methurepos.db.tar.gz \
+                      "$name"
+              done < /tmp/remove.txt
+          fi
 
           ##################################################
-          # DATABASE SYMLINK
+          # PREPARE FILES FOR UPLOAD (NO SYMLINKS)
           ##################################################
 
-          rm -f repo/methurepos.db
-
-          ln -s \
-              methurepos.db.tar.gz \
-              repo/methurepos.db
-
+          if [ -f repo/methurepos.db.tar.gz ]; then
+              # Replace relative symlink with an actual physical file copy
+              cp -f repo/methurepos.db.tar.gz repo/methurepos.db
+          fi
 
           echo
           echo "=========================================="
           echo "REMOVAL COMPLETE"
           echo "=========================================="
 
-
-          if [ -s /tmp/remove.txt ]; then
-
-              cat /tmp/remove.txt
-
-          else
-
-              echo "Nothing to remove."
-
-          fi
-
-
+          ls -lah repo/
           EOF
 
+      # ============================================================
+      # UPLOAD DATABASE
+      # ============================================================
 
       - name: Upload updated database
         env:
@@ -249,30 +201,29 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          gh release delete-asset mr \
-            methurepos.db.tar.gz \
-            --repo Methusan105/archconfig \
-            --yes \
-            || true
+          if [ ! -f repo/methurepos.db ]; then
+            echo "No database file exists to upload."
+            exit 0
+          fi
 
-          gh release delete-asset mr \
-            methurepos.db \
-            --repo Methusan105/archconfig \
-            --yes \
-            || true
-
+          echo "Uploading database files..."
 
           gh release upload mr \
-            repo/methurepos.db.tar.gz \
             repo/methurepos.db \
+            repo/methurepos.db.tar.gz \
             --repo Methusan105/archconfig \
             --clobber
 
+          echo "Upload complete."
+
+      # ============================================================
+      # SUMMARY
+      # ============================================================
 
       - name: Summary
         run: |
           echo "=========================================="
-          echo "REMOVE COMPLETE"
+          echo "SUMMARY"
           echo "=========================================="
 
-          ls -lah repo/
+          ls -lah repo/ 2>/dev/null || true
