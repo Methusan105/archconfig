@@ -26,6 +26,7 @@
         "custom_repositories": [{
         "name": "methurepos",
         "url": "https://github.com/Methusan105/archconfig/releases/download/mr"
+        "sign_check": "Optional"
     }],
         "custom_servers": [],
         "mirror_regions": {
