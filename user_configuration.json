@@ -23,11 +23,7 @@
         "sys_lang": "nb_NO.UTF-8"
     },
     "mirror_config": {
-        "custom_repositories": [{
-        "name": "methurepos",
-        "url": "https://github.com/Methusan105/archconfig/releases/download/mr"
-        "sign_check": "Optional"
-    }],
+        "custom_repositories": [],
         "custom_servers": [],
         "mirror_regions": {
             "Norway": [
