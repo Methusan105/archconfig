@@ -1,0 +1,3 @@
+[methurepos]
+SigLevel = Optional
+Server = https://github.com/Methusan105/archconfig/releases/download/mr
