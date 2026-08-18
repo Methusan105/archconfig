@@ -1,0 +1,2 @@
+sudo tar -cvpzf - /timeshift/snapshots/2026-08-18_09-34-03/ | split -b 2000m -d --numeric-suffixes=1 --suffix-length=3 - /home/methu/Nedlastinger/timeshift-backup.tar.gz.
+sudo mkdir -p /timeshift/snapshots/2026-08-18_09-34-03/ && sudo cat /home/methu/Nedlastinger/timeshift-backup.tar.gz.* | sudo tar -xvpzf - --strip-components=3 -C /timeshift/snapshots/2026-08-18_09-34-03/
