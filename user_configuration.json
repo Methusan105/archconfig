@@ -68,7 +68,8 @@
         "kate",
         "cpupower",
         "hdparm",
-        "qalculate-gtk"
+        "qalculate-gtk",
+        "zoxide"
     ],
     "pacman_config": {
         "color": true,
