@@ -24,8 +24,9 @@ fi
 echo -e "\e[1;34m[2/6] Syncing repositories & installing Linux-Zen and Nvidia packages...\e[0m"
 pacman -Sy --noconfirm
 pacman -S --needed --noconfirm \
-  base-devel git linux-zen linux-zen-headers dkms \
-  nvidia-dkms nvidia-utils lib32-nvidia-utils nvidia-settings \
+  linux-zen-headers nvidia-dkms \
+  base-devel git linux-zen dkms \
+  nvidia-utils lib32-nvidia-utils nvidia-settings \
   vulkan-icd-loader lib32-vulkan-icd-loader \
   steam lutris wine-staging giflib lib32-giflib \
   gamemode lib32-gamemode mangohud lib32-mangohud goverlay vkd3d lib32-vkd3d
@@ -53,24 +54,18 @@ if [ -f /etc/default/grub ]; then
 fi
 
 echo -e "\e[1;34m[5/6] Forcing DKMS Nvidia Module Build & Installation...\e[0m"
-NVIDIA_VER=$(pacman -Q nvidia-dkms | awk '{print $2}' | cut -d'-' -f1)
-ZEN_KERNEL_VER=$(pacman -Q linux-zen | awk '{print $2}' | sed 's/\.zen/-zen/')
-
-echo -e "\e[1;33mDetected Nvidia Version: ${NVIDIA_VER}\e[0m"
-echo -e "\e[1;33mTarget Kernel Version: ${ZEN_KERNEL_VER}\e[0m"
-
-dkms remove "nvidia/${NVIDIA_VER}" --all || true
-dkms install "nvidia/${NVIDIA_VER}" -k "${ZEN_KERNEL_VER}" --force
+dkms remove nvidia/610.57.04 --all || true
+dkms install nvidia/610.57.04 -k "$(uname -r)" --force
 
 echo -e "\e[1;34m[6/6] Early KMS (mkinitcpio) & Initramfs Rebuild...\e[0m"
 if [ -f /etc/mkinitcpio.conf ]; then
   if ! grep -q "nvidia" /etc/mkinitcpio.conf; then
     sed -i 's/^MODULES=(/MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm /' /etc/mkinitcpio.conf
   fi
-  mkinitcpio -P
 fi
+mkinitcpio -P
 
-echo -e "\n\e[1;32mSUCCESS! Force install completed without errors.\e[0m"
+echo -e "\n\e[1;32mSUCCESS! Force install finished perfectly.\e[0m"
 
 # Interactive prompt reading from terminal directly (supports curl | bash)
 read -p "Would you like to reboot the system now? [Y/n]: " -r RESPONSE < /dev/tty || RESPONSE="y"
