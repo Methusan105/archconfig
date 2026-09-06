@@ -6,8 +6,8 @@ if ! command -v zenity &> /dev/null; then
     sudo pacman -S --needed --noconfirm zenity
 fi
 
-# Open a GUI file selection dialog
-FILE_PART=$(zenity --file-selection --title="Select any part of the split backup file (e.g., .aa)")
+# Open a GUI file selection dialog starting at your home directory
+FILE_PART=$(zenity --file-selection --filename="$HOME/" --title="Select any part of the split backup file (e.g., .aa)")
 
 # Exit if the user cancelled
 if [ -z "$FILE_PART" ]; then
