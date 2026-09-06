@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       package_name:
-        description: 'AUR package name (e.g. visual-studio-code-bin)'
+        description: 'AUR package name (e.g. ryujinx-canary)'
         required: true
         type: string
 
@@ -30,6 +30,13 @@ jobs:
             cd /tmp
             git clone https://aur.archlinux.org/${{ github.event.inputs.package_name }}.git
             cd ${{ github.event.inputs.package_name }}
+
+            # Inject fix into prepare() if the package is ryujinx-canary
+            if [ \"${{ github.event.inputs.package_name }}\" = \"ryujinx-canary\" ]; then
+              echo 'Patching PKGBUILD for ryujinx-canary...'
+              sed -i '/prepare() {/a \  rm -f global.json \"\$_pkgsrc\"/global.json' PKGBUILD
+            fi
+
             makepkg -s --noconfirm
           "
 
