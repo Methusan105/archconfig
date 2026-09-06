@@ -1,0 +1,48 @@
+name: Build AUR Package & Upload to Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_name:
+        description: 'AUR package name (e.g. visual-studio-code-bin)'
+        required: true
+        type: string
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+
+    steps:
+      - name: Update System and Install Base Dependencies
+        run: |
+          pacman -Syu --noconfirm --needed git sudo github-cli
+
+      - name: Setup Unprivileged Builder User
+        run: |
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+      - name: Clone and Build Package
+        run: |
+          su builder -c "
+            cd /tmp
+            git clone https://aur.archlinux.org/${{ github.event.inputs.package_name }}.git
+            cd ${{ github.event.inputs.package_name }}
+            makepkg -s --noconfirm
+          "
+
+      - name: Upload Package to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          PKG_PATH=$(find /tmp/${{ github.event.inputs.package_name }} -name "*.pkg.tar.zst" | head -n 1)
+
+          if [ -z "$PKG_PATH" ]; then
+            echo "Error: No .pkg.tar.zst file found after build."
+            exit 1
+          fi
+
+          echo "Found package at: $PKG_PATH"
+          gh release upload mr "$PKG_PATH" --repo Methusan105/archconfig --clobber
