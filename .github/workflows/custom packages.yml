@@ -31,10 +31,11 @@ jobs:
             git clone https://aur.archlinux.org/${{ github.event.inputs.package_name }}.git
             cd ${{ github.event.inputs.package_name }}
 
-            # Inject fix into prepare() if the package is ryujinx-canary
+            # Fix prepare() for ryujinx-canary
             if [ \"${{ github.event.inputs.package_name }}\" = \"ryujinx-canary\" ]; then
-              echo 'Patching PKGBUILD for ryujinx-canary...'
-              sed -i '/prepare() {/a \  rm -f global.json \"\$_pkgsrc\"/global.json' PKGBUILD
+              echo 'Overriding prepare() in PKGBUILD for ryujinx-canary...'
+              # Remove existing prepare() block and replace with the safe version
+              sed -i '/prepare() {/,/}/c\prepare() {\n  cp \"\$_pkgsrc\"/global.json global.json 2>/dev/null || true\n  rm -f global.json \"\$_pkgsrc\"/global.json\n}' PKGBUILD
             fi
 
             makepkg -s --noconfirm
