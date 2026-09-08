@@ -54,10 +54,17 @@ fi
 echo "Found ${#URL_LIST[@]} archive part(s) to stream:"
 printf " - %s\n" "${URL_LIST[@]}"
 
+# Ensure destination directory exists before extracting
+sudo mkdir -p /timeshift/snapshots/
+
 # Stream all sequential parts directly into tar without storing files locally
 curl -sL "${URL_LIST[@]}" | sudo tar -xzvf - -C /timeshift/snapshots/
 
-if [ ${PIPESTATUS[0]} -eq 0 ] && [ ${PIPESTATUS[1]} -eq 0 ]; then
+# Capture pipeline status safely
+pipe_status=("${PIPESTATUS[@]}")
+
+# Safely check execution status using double brackets [[ ]]
+if [[ "${pipe_status[0]:-1}" -eq 0 && "${pipe_status[1]:-1}" -eq 0 ]]; then
     echo "Extraction completed successfully."
 else
     echo "An error occurred during extraction." >&2
