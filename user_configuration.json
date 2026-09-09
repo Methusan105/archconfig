@@ -69,7 +69,8 @@
         "cpupower",
         "hdparm",
         "qalculate-gtk",
-        "zoxide"
+        "zoxide",
+        "filelight"
     ],
     "pacman_config": {
         "color": true,
