@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # List required packages (package names match command names on Arch Linux)
-REQUIRED_PKGS=(zenity curl tar sudo)
+REQUIRED_PKGS=(zenity curl tar sudo jq)
 MISSING_PKGS=()
 
 # Check for missing commands
@@ -21,65 +21,101 @@ fi
 # Ask user for GitHub Personal Access Token (PAT)
 GITHUB_TOKEN=$(zenity --password \
     --title="GitHub Authentication" \
-    --text="Enter your GitHub Personal Access Token (leave blank for public repos):")
+    --text="Enter your GitHub Personal Access Token (PAT):")
 
-# Prepare curl authorization header argument if token is provided
-AUTH_HEADER=()
-if [ -n "$GITHUB_TOKEN" ]; then
-    AUTH_HEADER=(-H "Authorization: Bearer $GITHUB_TOKEN")
+if [ -z "$GITHUB_TOKEN" ]; then
+    echo "A GitHub Token is required to access private repositories. Exiting." >&2
+    exit 1
 fi
 
-# Ask user for the first URL via GUI
-FIRST_URL=$(zenity --entry \
+# Ask user for the web URL or first file name
+INPUT_URL=$(zenity --entry \
     --title="Timeshift Restore" \
-    --text="Enter the URL of the FIRST split part (ending in .001 or .aa):" \
+    --text="Enter the Release URL or Asset URL (ending in .001):" \
     --entry-text="https://github.com/Methusan105/Personal/releases/download/ALB/timeshift-backup.tar.gz.001")
 
-if [ -z "$FIRST_URL" ]; then
+if [ -z "$INPUT_URL" ]; then
     echo "No URL provided. Exiting."
     exit 0
 fi
 
-# Detect numeric extension pattern (.001)
-if [[ "$FIRST_URL" =~ \.001$ ]]; then
-    prefix="${FIRST_URL%.001}"
-    URL_LIST=()
-    i=1
+# Parse Owner, Repo, and Tag from the standard web URL
+# Pattern: https://github.com/OWNER/REPO/releases/download/TAG/FILENAME
+if [[ "$INPUT_URL" =~ github\.com/([^/]+)/([^/]+)/releases/download/([^/]+)/(.+) ]]; then
+    OWNER="${BASH_REMATCH[1]}"
+    REPO="${BASH_REMATCH[2]}"
+    TAG="${BASH_REMATCH[3]}"
+    FIRST_FILE="${BASH_REMATCH[4]}"
+else
+    echo "Invalid GitHub Release URL format." >&2
+    exit 1
+fi
 
-    # Auto-detect all sequential parts (.001, .002, ...) via HTTP HEAD checks
-    echo "Checking for split archive parts on server..."
+echo "Fetching release metadata via GitHub API..."
+
+# Query the GitHub API for the specified release tag
+RELEASE_INFO=$(curl -sH "Authorization: Bearer $GITHUB_TOKEN" \
+    -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/repos/$OWNER/$REPO/releases/tags/$TAG")
+
+# Check if release was found
+if echo "$RELEASE_INFO" | grep -q "Not Found"; then
+    echo "Error: Release or repository not found. Verify your PAT permissions and repository name." >&2
+    exit 1
+fi
+
+# Base filename prefix if numeric .001 pattern
+if [[ "$FIRST_FILE" =~ \.001$ ]]; then
+    BASE_NAME="${FIRST_FILE%.001}"
+    
+    # Extract asset API URLs sequentially using jq
+    ASSET_URLS=()
+    i=1
     while true; do
-        part_url=$(printf "%s.%03d" "$prefix" "$i")
-        if curl "${AUTH_HEADER[@]}" --output /dev/null --silent --head --fail "$part_url"; then
-            URL_LIST+=("$part_url")
+        target_file=$(printf "%s.%03d" "$BASE_NAME" "$i")
+        asset_url=$(echo "$RELEASE_INFO" | jq -r --arg fn "$target_file" '.assets[] | select(.name == $fn) | .url')
+        
+        if [ -n "$asset_url" ] && [ "$asset_url" != "null" ]; then
+            ASSET_URLS+=("$asset_url")
             ((i++))
         else
             break
         fi
     done
 else
-    # Fallback to single URL if not ending in .001
-    URL_LIST=("$FIRST_URL")
+    # Single file fallback
+    asset_url=$(echo "$RELEASE_INFO" | jq -r --arg fn "$FIRST_FILE" '.assets[] | select(.name == $fn) | .url')
+    if [ -n "$asset_url" ] && [ "$asset_url" != "null" ]; then
+        ASSET_URLS=("$asset_url")
+    else
+        ASSET_URLS=()
+    fi
 fi
 
-if [ ${#URL_LIST[@]} -eq 0 ]; then
-    echo "No accessible files found at the specified URL." >&2
+if [ ${#ASSET_URLS[@]} -eq 0 ]; then
+    echo "No matching asset files found in release '$TAG'." >&2
     exit 1
 fi
 
-echo "Found ${#URL_LIST[@]} archive part(s) to stream:"
-printf " - %s\n" "${URL_LIST[@]}"
+echo "Found ${#ASSET_URLS[@]} archive part(s) to stream."
 
-# Ensure destination directory exists before extracting
+# Ensure destination directory exists
 sudo mkdir -p /timeshift/snapshots/
 
-# Stream all sequential parts directly into tar without storing files locally
-curl "${AUTH_HEADER[@]}" -sL "${URL_LIST[@]}" | sudo tar -xzvf - -C /timeshift/snapshots/
+# Function to stream API assets into standard output
+stream_assets() {
+    for url in "${ASSET_URLS[@]}"; do
+        curl -sL -H "Authorization: Bearer $GITHUB_TOKEN" \
+             -H "Accept: application/octet-stream" \
+             "$url"
+    done
+}
 
-# Capture pipeline status safely
+# Stream all parts directly into tar
+stream_assets | sudo tar -xzvf - -C /timeshift/snapshots/
+
 pipe_status=("${PIPESTATUS[@]}")
 
-# Safely check execution status using double brackets [[ ]]
 if [[ "${pipe_status[0]:-1}" -eq 0 && "${pipe_status[1]:-1}" -eq 0 ]]; then
     echo "Extraction completed successfully."
 else
