@@ -18,6 +18,17 @@ if [ ${#MISSING_PKGS[@]} -gt 0 ]; then
     sudo pacman -S --needed --noconfirm "${MISSING_PKGS[@]}"
 fi
 
+# Ask user for GitHub Personal Access Token (PAT)
+GITHUB_TOKEN=$(zenity --password \
+    --title="GitHub Authentication" \
+    --text="Enter your GitHub Personal Access Token (leave blank for public repos):")
+
+# Prepare curl authorization header argument if token is provided
+AUTH_HEADER=()
+if [ -n "$GITHUB_TOKEN" ]; then
+    AUTH_HEADER=(-H "Authorization: Bearer $GITHUB_TOKEN")
+fi
+
 # Ask user for the first URL via GUI
 FIRST_URL=$(zenity --entry \
     --title="Timeshift Restore" \
@@ -39,7 +50,7 @@ if [[ "$FIRST_URL" =~ \.001$ ]]; then
     echo "Checking for split archive parts on server..."
     while true; do
         part_url=$(printf "%s.%03d" "$prefix" "$i")
-        if curl --output /dev/null --silent --head --fail "$part_url"; then
+        if curl "${AUTH_HEADER[@]}" --output /dev/null --silent --head --fail "$part_url"; then
             URL_LIST+=("$part_url")
             ((i++))
         else
@@ -51,6 +62,11 @@ else
     URL_LIST=("$FIRST_URL")
 fi
 
+if [ ${#URL_LIST[@]} -eq 0 ]; then
+    echo "No accessible files found at the specified URL." >&2
+    exit 1
+fi
+
 echo "Found ${#URL_LIST[@]} archive part(s) to stream:"
 printf " - %s\n" "${URL_LIST[@]}"
 
@@ -58,7 +74,7 @@ printf " - %s\n" "${URL_LIST[@]}"
 sudo mkdir -p /timeshift/snapshots/
 
 # Stream all sequential parts directly into tar without storing files locally
-curl -sL "${URL_LIST[@]}" | sudo tar -xzvf - -C /timeshift/snapshots/
+curl "${AUTH_HEADER[@]}" -sL "${URL_LIST[@]}" | sudo tar -xzvf - -C /timeshift/snapshots/
 
 # Capture pipeline status safely
 pipe_status=("${PIPESTATUS[@]}")
