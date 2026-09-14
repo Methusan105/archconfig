@@ -537,28 +537,29 @@ add_aliases() {
 
         cat >> "$target_rc" <<'EOF'
 
+#
+# ~/.bashrc
+#
+
+# If not running interactively, don't do anything
+[[ $- != *i* ]] && return
+fastfetch
+
+alias ls='ls --color=auto'
+alias grep='grep --color=auto'
+PS1='[\u@\h \W]\$ '
+
 # Methu Windows shortcuts
-
-alias bootwin="sudo sh -c 'grub-reboot \"$(sudo grep -i \"menuentry.*Windows Boot Manager\" /boot/grub/grub.cfg | cut -d\"'\"'\" -f2 | head -n1)\" && reboot'"
-
+alias bootwin='sudo grub-reboot "$(grep -i "menuentry.*Windows Boot Manager" /boot/grub/grub.cfg | sed -n '\''s/.*menuentry '\'''\''\([^'\'']*\).*/\1/p'\'' | head -n1)" && sudo reboot'
 alias cleaninstall="sudo grub-reboot arch-installer && reboot"
-
 alias mountwin="sudo mkdir -p /run/media/methu/Windows && sudo ntfs-3g /dev/nvme0n1p3 /run/media/methu/Windows"
-
 alias enable_warp-svc="sudo systemctl unmask warp-svc && sudo systemctl start warp-svc"
-
 alias disable_warp-svc="sudo systemctl stop warp-svc && sudo systemctl mask warp-svc"
-
 alias disablecores='for cpu in {4..7}; do echo 0 | sudo tee /sys/devices/system/cpu/cpu$cpu/online >/dev/null; done'
-
 alias enablecores='for cpu in {4..7}; do echo 1 | sudo tee /sys/devices/system/cpu/cpu$cpu/online >/dev/null; done'
-
 alias cpu-cool='sudo cpupower frequency-set -u 800MHz'
-
 alias cpu-normal='sudo cpupower frequency-set -u 1600MHz'
-
 alias fixefi='read -rp "Enter partition (e.g. nvme0n1p1 or /dev/nvme0n1p1): " dev && dev="/dev/${dev#/dev/}" && if [ -b "$dev" ]; then command -v fsck.fat >/dev/null 2>&1 || sudo pacman -S --needed dosfstools; sudo umount "$dev" 2>/dev/null; sudo fsck.fat -r -w "$dev" && sudo fsck.fat -v "$dev"; else echo "Error: Block device $dev not found."; fi'
-
 EOF
 
     fi
