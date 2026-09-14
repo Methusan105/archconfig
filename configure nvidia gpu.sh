@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Ensure script is run with root permissions
+# Automatically re-run the script with sudo if not already root
 if [ "$EUID" -ne 0 ]; then
-  echo -e "\e[1;31mError: Please run this script with sudo.\e[0m"
-  exit 1
+exec sudo bash "$0" "$@"
 fi
 
-# Detect calling regular user (makepkg cannot run directly as root)
+# Detect the original regular user (important for makepkg/yay)
 TARGET_USER="${SUDO_USER:-$USER}"
+
 if [ "$TARGET_USER" = "root" ]; then
-  echo -e "\e[1;31mError: Do not execute directly as root. Run as regular user via sudo.\e[0m"
-  exit 1
+echo -e "\e[1;31mError: Do not execute directly as root. Run this script as a normal user.\e[0m"
+exit 1
 fi
 
 TARGET_HOME=$(getent passwd "$TARGET_USER" | cut -d: -f6)
