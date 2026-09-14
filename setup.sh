@@ -19,7 +19,7 @@ sed -i '/^\[methurepos\]/,/^Server = /d' /etc/pacman.conf
 printf '\n[methurepos]\nSigLevel = Optional\nServer = https://github.com/Methusan105/archconfig/releases/download/mr\n' \
 | tee -a /etc/pacman.conf >/dev/null
 
-pacman -Sy
+pacman -Sy process-lasso-linux archconfig-cli ffmpeg-gui-ver-methu github-release-downloader github-release-uploader qemu-iso-disk-launcher stremio
 
 
 #################################################
@@ -547,17 +547,15 @@ echo " Setup complete"
 echo "====================================="
 echo ""
 echo "Installed:"
-echo "- Brave (Flatpak)"
-echo "- Stremio (Flatpak)"
-echo "- Spotify Launcher (Arch)"
+echo "- Brave"
+echo "- Spotify"
 echo "- SpotX patch applied"
 echo "- yay (AUR helper)"
-echo "- MystiQ (AUR)"
 echo "- PipeWire + WirePlumber"
 echo "- ZRAM 16GB (zstd)"
 echo "- RAM flush every 30 minutes"
 echo "- Intel media drivers"
-echo "- Stremio Arch Package"
+echo "- Stremio"
 echo "- GRUB deep sleep fix"
 echo "- Windows shortcuts added"
 echo ""
