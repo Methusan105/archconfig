@@ -73,9 +73,26 @@ jobs:
 
           package() {
             cd \"\$srcdir/frame\"
-            install -Dm755 \"target/release/frame\" \"\$pkgdir/usr/bin/frame\"
-            if [ -d \"target/linux\" ]; then
-              cp -r target/linux/* \"\$pkgdir/\" 2>/dev/null || true
+
+            mkdir -p \"\$pkgdir/usr/lib/frame\"
+            mkdir -p \"\$pkgdir/usr/bin\"
+            mkdir -p \"\$pkgdir/usr/share\"
+
+            # Unpack the generated tar.gz bundle directly into the package structure
+            if [ -f \"target/release/frame-linux-x86_64.tar.gz\" ]; then
+              tar -xzf \"target/release/frame-linux-x86_64.tar.gz\" -C \"\$pkgdir/usr/lib/frame\" --strip-components=1
+            elif [ -f \"target/release/frame-app-linux-x86_64.tar.gz\" ]; then
+              tar -xzf \"target/release/frame-app-linux-x86_64.tar.gz\" -C \"\$pkgdir/usr/lib/frame\" --strip-components=1
+            fi
+
+            # Symlink main binary to PATH
+            if [ -f \"\$pkgdir/usr/lib/frame/bin/frame\" ]; then
+              ln -sf /usr/lib/frame/bin/frame \"\$pkgdir/usr/bin/frame\"
+            fi
+
+            # Install desktop entry and icons
+            if [ -d \"\$pkgdir/usr/lib/frame/share\" ]; then
+              cp -r \"\$pkgdir/usr/lib/frame/share/\"* \"\$pkgdir/usr/share/\"
             fi
           }
           EOF
@@ -95,6 +112,9 @@ jobs:
           fi
 
           echo "Generated package: $PKG_PATH"
+
+          # Verify generated package size
+          ls -lh "$PKG_PATH"
 
           OLD_ASSETS=$(gh release view mr --repo Methusan105/archconfig --json assets -q '.assets[].name' | grep -E '^frame(-git)?-.*\.pkg\.tar\.zst$' || true)
           for ASSET in $OLD_ASSETS; do
