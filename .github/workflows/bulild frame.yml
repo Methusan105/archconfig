@@ -2,7 +2,6 @@ name: Build Frame Package & Upload to Release
 
 on:
   schedule:
-    # Runs automatically every Sunday at midnight UTC
     - cron: '0 0 * * 0'
   workflow_dispatch:
 
@@ -20,7 +19,8 @@ jobs:
         run: |
           pacman -Syu --noconfirm --needed \
             git sudo github-cli rust cargo \
-            clang llvm lld compiler-rt ffmpeg || true
+            clang llvm lld compiler-rt ffmpeg \
+            libxkbcommon libxcb fontconfig freetype2 alsa-lib libglvnd wayland || true
 
       - name: Setup Unprivileged Builder User
         run: |
@@ -34,7 +34,6 @@ jobs:
           su builder -c "
             cd /tmp/frame-workspace || exit 1
 
-            # Generate PKGBUILD inline
             cat << 'EOF' > PKGBUILD
           pkgname=frame-git
           pkgver=r0.1
@@ -43,8 +42,8 @@ jobs:
           arch=('x86_64')
           url=\"https://github.com/66HEX/frame\"
           license=('custom')
-          depends=('gcc-libs' 'glibc' 'ffmpeg')
-          makedepends=('git' 'cargo' 'clang' 'llvm' 'lld')
+          depends=('gcc-libs' 'glibc' 'ffmpeg' 'libxkbcommon' 'libxcb' 'fontconfig' 'freetype2' 'alsa-lib')
+          makedepends=('git' 'cargo' 'clang' 'llvm' 'lld' 'libxkbcommon' 'libxcb' 'fontconfig' 'freetype2' 'alsa-lib')
           provides=('frame')
           conflicts=('frame')
           source=(\"git+https://github.com/66HEX/frame.git\")
@@ -64,8 +63,6 @@ jobs:
           build() {
             cd \"\$srcdir/frame\"
             export CARGO_HOME=\"\$srcdir/cargo-home\"
-            
-            # Use Clang and LLVM tools for compiling native dependencies like ring
             export CC=clang
             export CXX=clang++
             export AR=llvm-ar
@@ -83,7 +80,6 @@ jobs:
           }
           EOF
 
-            # Clean workspace and build package
             makepkg -s --noconfirm --skippgpcheck --skipinteg --skipchecksums --ignorearch || exit 1
           "
 
@@ -100,13 +96,11 @@ jobs:
 
           echo "Generated package: $PKG_PATH"
 
-          # Delete existing assets to avoid conflicts
           OLD_ASSETS=$(gh release view mr --repo Methusan105/archconfig --json assets -q '.assets[].name' | grep -E '^frame(-git)?-.*\.pkg\.tar\.zst$' || true)
           for ASSET in $OLD_ASSETS; do
             echo "Removing old asset: $ASSET"
             gh release delete-asset mr "$ASSET" --repo Methusan105/archconfig -y || true
           done
 
-          # Upload updated package
           gh release upload mr "$PKG_PATH" --repo Methusan105/archconfig --clobber
           echo "Successfully uploaded Frame package to release 'mr'!"
