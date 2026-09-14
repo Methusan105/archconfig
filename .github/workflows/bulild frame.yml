@@ -1,0 +1,104 @@
+name: Build Frame Package & Upload to Release
+
+on:
+  schedule:
+    # Runs automatically every Sunday at midnight UTC
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release-frame:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+
+    steps:
+      - name: Update System & Install Dependencies
+        run: |
+          pacman -Syu --noconfirm --needed git sudo github-cli rust cargo clang ffmpeg || true
+
+      - name: Setup Unprivileged Builder User
+        run: |
+          useradd -m builder || true
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers || true
+          mkdir -p /tmp/frame-workspace
+          chown -R builder:builder /tmp/frame-workspace
+
+      - name: Generate PKGBUILD & Build Package
+        run: |
+          su builder -c "
+            cd /tmp/frame-workspace || exit 1
+
+            # Generate PKGBUILD inline
+            cat << 'EOF' > PKGBUILD
+          pkgname=frame-git
+          pkgver=r0.1
+          pkgrel=1
+          pkgdesc=\"Frame application built from source\"
+          arch=('x86_64')
+          url=\"https://github.com/66HEX/frame\"
+          license=('custom')
+          depends=('gcc-libs' 'glibc' 'ffmpeg')
+          makedepends=('git' 'cargo' 'clang')
+          provides=('frame')
+          conflicts=('frame')
+          source=(\"git+https://github.com/66HEX/frame.git\")
+          sha256sums=('SKIP')
+
+          pkgver() {
+            cd \"\$srcdir/frame\"
+            printf \"r%s.%s\" \"\$(git rev-list --count HEAD)\" \"\$(git rev-parse --short HEAD)\"
+          }
+
+          prepare() {
+            cd \"\$srcdir/frame\"
+            export CARGO_HOME=\"\$srcdir/cargo-home\"
+            cargo xtask setup-ffmpeg || true
+          }
+
+          build() {
+            cd \"\$srcdir/frame\"
+            export CARGO_HOME=\"\$srcdir/cargo-home\"
+            cargo xtask build --release
+            cargo xtask bundle linux
+          }
+
+          package() {
+            cd \"\$srcdir/frame\"
+            install -Dm755 \"target/release/frame\" \"\$pkgdir/usr/bin/frame\"
+            if [ -d \"target/linux\" ]; then
+              cp -r target/linux/* \"\$pkgdir/\" 2>/dev/null || true
+            fi
+          }
+          EOF
+
+            # Build package skipping all signature and verification checks
+            makepkg -s --noconfirm --skippgpcheck --skipinteg --skipchecksums --ignorearch || exit 1
+          "
+
+      - name: Upload Package to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PKG_PATH=$(find /tmp/frame-workspace -name "*.pkg.tar.zst" 2>/dev/null | head -n 1)
+
+          if [ -z "$PKG_PATH" ]; then
+            echo "Error: No .pkg.tar.zst file was generated."
+            exit 1
+          fi
+
+          echo "Generated package: $PKG_PATH"
+
+          # Delete existing frame-git assets from the release to avoid old versions accumulating
+          OLD_ASSETS=$(gh release view mr --repo Methusan105/archconfig --json assets -q '.assets[].name' | grep -E '^frame(-git)?-.*\.pkg\.tar\.zst$' || true)
+          for ASSET in $OLD_ASSETS; do
+            echo "Removing old asset: $ASSET"
+            gh release delete-asset mr "$ASSET" --repo Methusan105/archconfig -y || true
+          done
+
+          # Upload new package asset
+          gh release upload mr "$PKG_PATH" --repo Methusan105/archconfig --clobber
+          echo "Successfully uploaded Frame package to release 'mr'!"
