@@ -64,8 +64,12 @@ jobs:
           build() {
             cd \"\$srcdir/frame\"
             export CARGO_HOME=\"\$srcdir/cargo-home\"
-            export CC=gcc
-            export CXX=g++
+            
+            # Use Clang and LLVM tools for compiling native dependencies like ring
+            export CC=clang
+            export CXX=clang++
+            export AR=llvm-ar
+
             cargo xtask build --release
             cargo xtask bundle linux
           }
@@ -79,7 +83,7 @@ jobs:
           }
           EOF
 
-            # Build package skipping all signature and verification checks
+            # Clean workspace and build package
             makepkg -s --noconfirm --skippgpcheck --skipinteg --skipchecksums --ignorearch || exit 1
           "
 
@@ -96,13 +100,13 @@ jobs:
 
           echo "Generated package: $PKG_PATH"
 
-          # Delete existing frame-git assets from the release to avoid old versions accumulating
+          # Delete existing assets to avoid conflicts
           OLD_ASSETS=$(gh release view mr --repo Methusan105/archconfig --json assets -q '.assets[].name' | grep -E '^frame(-git)?-.*\.pkg\.tar\.zst$' || true)
           for ASSET in $OLD_ASSETS; do
             echo "Removing old asset: $ASSET"
             gh release delete-asset mr "$ASSET" --repo Methusan105/archconfig -y || true
           done
 
-          # Upload new package asset
+          # Upload updated package
           gh release upload mr "$PKG_PATH" --repo Methusan105/archconfig --clobber
           echo "Successfully uploaded Frame package to release 'mr'!"
