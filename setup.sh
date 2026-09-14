@@ -19,7 +19,7 @@ sed -i '/^\[methurepos\]/,/^Server = /d' /etc/pacman.conf
 printf '\n[methurepos]\nSigLevel = Optional\nServer = https://github.com/Methusan105/archconfig/releases/download/mr\n' \
 | tee -a /etc/pacman.conf >/dev/null
 
-pacman -Sy process-lasso-linux archconfig-cli ffmpeg-gui-ver-methu github-release-downloader github-release-uploader qemu-iso-disk-launcher stremio
+pacman -Sy process-lasso-linux archconfig-cli ffmpeg-gui-ver-methu github-release-downloader github-release-uploader qemu-iso-disk-launcher stremio vscodium-bin
 
 
 #################################################
