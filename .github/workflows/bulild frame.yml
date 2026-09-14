@@ -18,7 +18,9 @@ jobs:
     steps:
       - name: Update System & Install Dependencies
         run: |
-          pacman -Syu --noconfirm --needed git sudo github-cli rust cargo clang ffmpeg || true
+          pacman -Syu --noconfirm --needed \
+            git sudo github-cli rust cargo \
+            clang llvm lld compiler-rt ffmpeg || true
 
       - name: Setup Unprivileged Builder User
         run: |
@@ -42,7 +44,7 @@ jobs:
           url=\"https://github.com/66HEX/frame\"
           license=('custom')
           depends=('gcc-libs' 'glibc' 'ffmpeg')
-          makedepends=('git' 'cargo' 'clang')
+          makedepends=('git' 'cargo' 'clang' 'llvm' 'lld')
           provides=('frame')
           conflicts=('frame')
           source=(\"git+https://github.com/66HEX/frame.git\")
@@ -62,6 +64,8 @@ jobs:
           build() {
             cd \"\$srcdir/frame\"
             export CARGO_HOME=\"\$srcdir/cargo-home\"
+            export CC=gcc
+            export CXX=g++
             cargo xtask build --release
             cargo xtask bundle linux
           }
