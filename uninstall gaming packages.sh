@@ -14,8 +14,6 @@ GAMING_PACKAGES=(
     lutris
     heroic-games-launcher-bin
     wine-staging
-    giflib
-    lib32-giflib
 
     # Gaming/performance tools
     gamemode
@@ -23,10 +21,6 @@ GAMING_PACKAGES=(
     mangohud
     lib32-mangohud
     goverlay
-
-    # Vulkan / DirectX translation packages installed by the original script
-    vkd3d
-    lib32-vkd3d
 )
 
 echo -e "\e[1;34mRemoving installed gaming packages...\e[0m"
