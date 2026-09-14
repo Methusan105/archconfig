@@ -70,7 +70,8 @@
         "hdparm",
         "qalculate-gtk",
         "zoxide",
-        "filelight"
+        "filelight",
+        "axel"
     ],
     "pacman_config": {
         "color": true,
