@@ -39,22 +39,51 @@ jobs:
             exit 0
           fi
 
-          echo "Found existing package files in release:"
-          echo "$ASSETS"
+          # Filter out frame and frame-git from assets upfront
+          FILTERED_ASSETS=$(echo "$ASSETS" | grep -v -E '^frame(-git)?-[0-9]' || true)
+
+          echo "Existing package assets (excluding frame):"
+          echo "$FILTERED_ASSETS"
           echo "--------------------------------------------------"
 
-          # Extract unique package names from asset filenames
-          PKGNAMES=$(echo "$ASSETS" | sed -E 's/-[^-]+-[^-]+-[^-]+\.pkg\.tar\.zst$//' | sort -u)
+          # Extract unique package names, guaranteeing frame/frame-git are completely ignored
+          CANDIDATES=$(echo "$FILTERED_ASSETS" | sed -E 's/-[^-]+-[^-]+-[^-]+\.pkg\.tar\.zst$//' | grep -v -E '^(frame|frame-git)$' | sort -u)
 
-          for PKGNAME in $PKGNAMES; do
+          if [ -z "$CANDIDATES" ]; then
+            echo "No eligible AUR candidates found to evaluate."
+            exit 0
+          fi
+
+          # Construct multi-argument AUR RPC API query
+          API_URL="https://aur.archlinux.org/rpc/?v=5&type=info"
+          for PKG in $CANDIDATES; do
+            API_URL="${API_URL}&arg[]=${PKG}"
+          done
+
+          echo "Querying AUR RPC API for candidates..."
+          AUR_DATA=$(curl -s "$API_URL")
+
+          # Filter candidates down to packages verified to exist in the AUR
+          VALID_AUR_PKGS=$(echo "$AUR_DATA" | jq -r '.results[].Name // empty' | sort -u)
+
+          echo "Verified AUR Packages:"
+          if [ -n "$VALID_AUR_PKGS" ]; then
+            echo "$VALID_AUR_PKGS"
+          else
+            echo "None of the release candidates exist on AUR."
+            exit 0
+          fi
+          echo "--------------------------------------------------"
+
+          for PKGNAME in $VALID_AUR_PKGS; do
             echo "Evaluating Package: $PKGNAME"
 
-            # Clean and prepare directory with builder permissions
+            # Prepare directory
             rm -rf /tmp/builds/$PKGNAME
             mkdir -p /tmp/builds/$PKGNAME
             chown -R builder:builder /tmp/builds/$PKGNAME
 
-            # Clone AUR repository
+            # Clone verified AUR repository
             su builder -c "
               cd /tmp/builds/$PKGNAME || exit 1
               git clone https://aur.archlinux.org/${PKGNAME}.git repo || exit 1
@@ -73,13 +102,13 @@ jobs:
 
             echo "  Expected Latest Filename: $EXPECTED_PKG_NAME"
 
-            # Check if expected package file already exists in current release assets
-            if echo "$ASSETS" | grep -qFx "$EXPECTED_PKG_NAME"; then
+            # Check if expected package file already exists in release assets
+            if echo "$FILTERED_ASSETS" | grep -qFx "$EXPECTED_PKG_NAME"; then
               echo "  [UP TO DATE] $EXPECTED_PKG_NAME is already in the release."
             else
               echo "  [UPDATE AVAILABLE] Building $EXPECTED_PKG_NAME..."
 
-              # Build package as builder user skipping all signature, integrity, and architecture verification checks
+              # Build package as builder user skipping all signature, integrity, and architecture checks
               su builder -c "
                 cd /tmp/builds/$PKGNAME/repo || exit 1
 
@@ -95,8 +124,8 @@ jobs:
               NEW_PKG_PATH=$(find /tmp/builds/$PKGNAME/repo -name "*.pkg.tar.zst" 2>/dev/null | head -n 1)
 
               if [ -n "$NEW_PKG_PATH" ]; then
-                # Find and remove old release asset for this package (if any)
-                OLD_ASSET=$(echo "$ASSETS" | grep -E "^${PKGNAME}-[0-9].*\\.pkg\\.tar\\.zst$" || true)
+                # Remove outdated release asset for this package (if any)
+                OLD_ASSET=$(echo "$FILTERED_ASSETS" | grep -E "^${PKGNAME}-[0-9].*\\.pkg\\.tar\\.zst$" || true)
                 if [ -n "$OLD_ASSET" ] && [ "$OLD_ASSET" != "$EXPECTED_PKG_NAME" ]; then
                   echo "  Deleting outdated release asset: $OLD_ASSET"
                   gh release delete-asset mr "$OLD_ASSET" --repo Methusan105/archconfig -y || true
