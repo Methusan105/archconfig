@@ -49,13 +49,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Find any .pkg.tar.zst generated regardless of inner directory structure
-          PKG_PATH=$(find /tmp -name "*.pkg.tar.zst" 2>/dev/null | head -n 1)
+          # Find all .pkg.tar.zst files generated during the build
+          mapfile -t PKG_FILES < <(find /tmp -name "*.pkg.tar.zst" 2>/dev/null)
 
-          if [ -z "$PKG_PATH" ]; then
-            echo "Error: No .pkg.tar.zst file found after build attempt."
+          if [ ${#PKG_FILES[@]} -eq 0 ]; then
+            echo "Error: No .pkg.tar.zst files found after build attempt."
             exit 1
           fi
 
-          echo "Found package at: $PKG_PATH"
-          gh release upload mr "$PKG_PATH" --repo Methusan105/archconfig --clobber
+          echo "Found ${#PKG_FILES[@]} package file(s):"
+          printf '%s\n' "${PKG_FILES[@]}"
+
+          # Upload all found files to the release
+          gh release upload mr "${PKG_FILES[@]}" --repo Methusan105/archconfig --clobber
