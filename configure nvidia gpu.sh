@@ -3,77 +3,79 @@ set -euo pipefail
 
 # Automatically re-run the script with sudo if not already root
 if [ "$EUID" -ne 0 ]; then
-exec sudo bash "$0" "$@"
+    exec sudo bash "$0" "$@"
 fi
 
-# Detect the original regular user (important for makepkg/yay)
+# Detect the original regular user
 TARGET_USER="${SUDO_USER:-$USER}"
 
 if [ "$TARGET_USER" = "root" ]; then
-echo -e "\e[1;31mError: Do not execute directly as root. Run this script as a normal user.\e[0m"
-exit 1
+    echo -e "\e[1;31mError: Do not execute this script directly as root.\e[0m"
+    echo "Run it as a normal user so EnvyControl can be configured correctly."
+    exit 1
 fi
 
-TARGET_HOME=$(getent passwd "$TARGET_USER" | cut -d: -f6)
-
-echo -e "\e[1;34m[1/6] Enabling [multilib] repository...\e[0m"
-if ! grep -q "^\[multilib\]" /etc/pacman.conf; then
-  sed -i '/^#\[multilib\]/{s/^#//;n;s/^#//}' /etc/pacman.conf
-fi
-
-echo -e "\e[1;34m[2/6] Syncing repositories & installing Linux-Zen and Nvidia packages...\e[0m"
+echo -e "\e[1;34m[1/4] Updating package databases...\e[0m"
 pacman -Sy --noconfirm
-pacman -S --needed --noconfirm \
-  linux-zen-headers nvidia-dkms \
-  base-devel git linux-zen dkms \
-  nvidia-utils lib32-nvidia-utils nvidia-settings \
-  vulkan-icd-loader lib32-vulkan-icd-loader \
-  steam lutris wine-staging giflib \
-  gamemode lib32-gamemode mangohud lib32-mangohud goverlay vkd3d lib32-vkd3d
 
-echo -e "\e[1;34m[3/6] Setting up yay AUR helper and EnvyControl...\e[0m"
-if ! command -v yay &> /dev/null; then
-  BUILD_DIR=$(mktemp -d -p "$TARGET_HOME")
-  chown -R "$TARGET_USER:$TARGET_USER" "$BUILD_DIR"
-  sudo -u "$TARGET_USER" git clone https://aur.archlinux.org/yay.git "$BUILD_DIR/yay"
-  sudo -u "$TARGET_USER" bash -c "cd '$BUILD_DIR/yay' && makepkg -si --noconfirm"
-  rm -rf "$BUILD_DIR"
+echo -e "\e[1;34m[2/4] Installing NVIDIA driver and required packages...\e[0m"
+
+pacman -S --needed --noconfirm \
+    nvidia-dkms \
+    nvidia-utils \
+    nvidia-settings \
+    dkms \
+    linux-headers
+
+echo -e "\e[1;34m[3/4] Installing EnvyControl...\e[0m"
+
+if ! command -v envycontrol >/dev/null 2>&1; then
+    echo "EnvyControl is not installed."
+
+    # Install yay temporarily if necessary
+    if ! command -v yay >/dev/null 2>&1; then
+        echo "Installing yay temporarily to obtain EnvyControl..."
+
+        BUILD_DIR=$(mktemp -d)
+
+        chown "$TARGET_USER:$TARGET_USER" "$BUILD_DIR"
+
+        sudo -u "$TARGET_USER" git clone \
+            https://aur.archlinux.org/yay.git \
+            "$BUILD_DIR/yay"
+
+        sudo -u "$TARGET_USER" bash -c \
+            "cd '$BUILD_DIR/yay' && makepkg -si --noconfirm"
+
+        rm -rf "$BUILD_DIR"
+    fi
+
+    sudo -u "$TARGET_USER" yay -S --needed --noconfirm envycontrol
 fi
 
-sudo -u "$TARGET_USER" yay -S --needed --noconfirm envycontrol heroic-games-launcher-bin
+echo -e "\e[1;34m[4/4] Configuring NVIDIA hybrid graphics mode...\e[0m"
+
 envycontrol -s hybrid
 
-echo -e "\e[1;34m[4/6] Configuring GRUB Kernel Parameters...\e[0m"
-if [ -f /etc/default/grub ]; then
-  for param in "nvidia-drm.modeset=1" "nvidia-drm.fbdev=1"; do
-    if ! grep -q "$param" /etc/default/grub; then
-      sed -i "s/^\(GRUB_CMDLINE_LINUX_DEFAULT=\"[^\"]*\)\"/\1 $param\"/" /etc/default/grub
-    fi
-  done
-  grub-mkconfig -o /boot/grub/grub.cfg
-fi
+echo
+echo -e "\e[1;32mSUCCESS!\e[0m"
+echo
+echo "NVIDIA drivers have been installed."
+echo "EnvyControl has been configured for hybrid graphics mode."
+echo
+echo "A reboot is required for the changes to take effect."
 
-echo -e "\e[1;34m[5/6] Forcing DKMS Nvidia Module Build & Installation...\e[0m"
-dkms remove nvidia/610.57.04 --all || true
-dkms install nvidia/610.57.04 -k "$(uname -r)" --force
-
-echo -e "\e[1;34m[6/6] Early KMS (mkinitcpio) & Initramfs Rebuild...\e[0m"
-if [ -f /etc/mkinitcpio.conf ]; then
-  if ! grep -q "nvidia" /etc/mkinitcpio.conf; then
-    sed -i 's/^MODULES=(/MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm /' /etc/mkinitcpio.conf
-  fi
-fi
-mkinitcpio -P
-
-echo -e "\n\e[1;32mSUCCESS! Force install finished perfectly.\e[0m"
-
-# Interactive prompt reading from terminal directly (supports curl | bash)
+# Interactive prompt reading directly from terminal
 read -p "Would you like to reboot the system now? [Y/n]: " -r RESPONSE < /dev/tty || RESPONSE="y"
+
 case "$RESPONSE" in
     [nN][oO]|[nN])
-        echo -e "\e[1;33mReboot skipped. Remember to reboot manually before gaming.\e[0m"
+        echo
+        echo -e "\e[1;33mReboot skipped.\e[0m"
+        echo "Please reboot manually when convenient."
         ;;
     *)
+        echo
         echo -e "\e[1;34mRebooting now...\e[0m"
         reboot
         ;;
