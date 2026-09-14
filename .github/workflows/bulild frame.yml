@@ -20,7 +20,7 @@ jobs:
           pacman -Syu --noconfirm --needed \
             git sudo github-cli rust cargo \
             clang llvm lld compiler-rt ffmpeg \
-            libxkbcommon libxcb fontconfig freetype2 alsa-lib libglvnd wayland || true
+            libxkbcommon libxkbcommon-x11 libxcb fontconfig freetype2 alsa-lib libglvnd wayland || true
 
       - name: Setup Unprivileged Builder User
         run: |
@@ -42,8 +42,8 @@ jobs:
           arch=('x86_64')
           url=\"https://github.com/66HEX/frame\"
           license=('custom')
-          depends=('gcc-libs' 'glibc' 'ffmpeg' 'libxkbcommon' 'libxcb' 'fontconfig' 'freetype2' 'alsa-lib')
-          makedepends=('git' 'cargo' 'clang' 'llvm' 'lld' 'libxkbcommon' 'libxcb' 'fontconfig' 'freetype2' 'alsa-lib')
+          depends=('gcc-libs' 'glibc' 'ffmpeg' 'libxkbcommon' 'libxkbcommon-x11' 'libxcb' 'fontconfig' 'freetype2' 'alsa-lib')
+          makedepends=('git' 'cargo' 'clang' 'llvm' 'lld' 'libxkbcommon' 'libxkbcommon-x11' 'libxcb' 'fontconfig' 'freetype2' 'alsa-lib')
           provides=('frame')
           conflicts=('frame')
           source=(\"git+https://github.com/66HEX/frame.git\")
