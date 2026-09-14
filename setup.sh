@@ -356,6 +356,25 @@ pacman -S --needed --noconfirm \
 systemctl enable --now bluetooth.service
 
 #################################################
+# FORCE SBC-XQ CODEC ON HEADPHONES
+#################################################
+
+echo "=== Configuring WirePlumber for SBC-XQ ==="
+
+# Opprett konfigurasjonsmappen for den faktiske brukeren
+mkdir -p "$USER_HOME/.config/wireplumber/wireplumber.conf.d"
+
+# Skriv SBC-XQ-prioriteringen til filen
+cat > "$USER_HOME/.config/wireplumber/wireplumber.conf.d/50-bluetooth.conf" <<'EOF'
+monitor.bluez.properties = {
+    bluez5.a2dp.codecs = [ sbc_xq sbc aac ]
+}
+EOF
+
+# Sørg for at den vanlige brukeren eier filen og mappen
+chown -R "$REAL_USER:$REAL_USER" "$USER_HOME/.config/wireplumber"
+
+#################################################
 # RESTART USER AUDIO
 #################################################
 
