@@ -167,7 +167,7 @@ else
 fi
 
 #################################################
-# AUR PACKAGES
+# AUR PACKAGES & PRELOAD
 #################################################
 
 echo "=== Installing AUR packages ==="
@@ -177,7 +177,22 @@ sudo -u "$REAL_USER" yay -S --needed --noconfirm \
     warp-cli \
     spotify \
     gotohp-bin \
-    galaxybudsclient-bin
+    galaxybudsclient-bin \
+    preload
+
+echo "=== Enabling Preload ==="
+
+systemctl enable --now preload.service
+
+#################################################
+# IRQBALANCE
+#################################################
+
+echo "=== Installing and enabling irqbalance ==="
+
+pacman -S --needed --noconfirm irqbalance
+
+systemctl enable --now irqbalance.service
 
 #################################################
 # SPOTX
@@ -633,6 +648,8 @@ echo "- Brave"
 echo "- Spotify"
 echo "- SpotX"
 echo "- Cloudflare WARP"
+echo "- Preload"
+echo "- irqbalance"
 echo "- PipeWire"
 echo "- WirePlumber"
 echo "- Bluetooth"
