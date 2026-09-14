@@ -24,15 +24,13 @@ jobs:
         run: |
           useradd -m builder || true
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers || true
+          mkdir -p /tmp/builds
+          chown -R builder:builder /tmp/builds
 
       - name: Fetch Current Release Assets & Check Against AUR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Create a working directory
-          mkdir -p /tmp/aur-update
-          cd /tmp/aur-update
-
           echo "Fetching assets from release 'mr'..."
           ASSETS=$(gh release view mr --repo Methusan105/archconfig --json assets -q '.assets[].name' | grep '\.pkg\.tar\.zst$' || true)
 
@@ -45,60 +43,45 @@ jobs:
           echo "$ASSETS"
           echo "--------------------------------------------------"
 
-          # Loop through each .pkg.tar.zst asset found in the release
-          for ASSET in $ASSETS; do
-            # Extract package name and version from asset name:
-            # Format usually: {pkgname}-{pkgver}-{pkgrel}-{arch}.pkg.tar.zst
-            # Example: ryujinx-canary-1.1.0-1-x86_64.pkg.tar.zst
-            
-            # Remove extension
-            BASENAME="${ASSET%.pkg.tar.zst}"
-            
-            # Extract architecture (last segment after hyphen)
-            ARCH="${BASENAME##*-}"
-            WITHOUT_ARCH="${BASENAME%-*}"
-            
-            # Extract pkgrel (second to last segment)
-            PKGREL="${WITHOUT_ARCH##*-}"
-            WITHOUT_REL="${WITHOUT_ARCH%-*}"
-            
-            # Extract pkgver (third to last segment)
-            PKGVER="${WITHOUT_REL##*-}"
-            
-            # The remainder is the package name
-            PKGNAME="${WITHOUT_REL%-*}"
-            
-            CURRENT_RELEASE_VERSION="${PKGVER}-${PKGREL}"
+          # Extract unique package names from asset filenames
+          PKGNAMES=$(echo "$ASSETS" | sed -E 's/-[^-]+-[^-]+-[^-]+\.pkg\.tar\.zst$//' | sort -u)
 
+          for PKGNAME in $PKGNAMES; do
             echo "Evaluating Package: $PKGNAME"
-            echo "  Current Release Version: $CURRENT_RELEASE_VERSION"
 
-            # Query AUR RPC API
-            AUR_RESPONSE=$(curl -s "https://aur.archlinux.org/rpc/?v=5&type=info&arg[]=${PKGNAME}")
-            AUR_VERSION=$(echo "$AUR_RESPONSE" | jq -r '.results[0].Version // empty')
+            # Clean and prepare directory with builder permissions
+            rm -rf /tmp/builds/$PKGNAME
+            mkdir -p /tmp/builds/$PKGNAME
+            chown -R builder:builder /tmp/builds/$PKGNAME
 
-            if [ -z "$AUR_VERSION" ]; then
-              echo "  [SKIP] Package '$PKGNAME' was not found on AUR."
+            # Clone AUR repository
+            su builder -c "
+              cd /tmp/builds/$PKGNAME || exit 1
+              git clone https://aur.archlinux.org/${PKGNAME}.git repo || exit 1
+            " || {
+              echo "  [SKIP] Failed to clone $PKGNAME from AUR."
               continue
-            fi
+            }
 
-            echo "  AUR Latest Version:      $AUR_VERSION"
+            # Determine expected package filename ignoring checks/architectures
+            EXPECTED_PKG_PATH=$(su builder -c "
+              cd /tmp/builds/$PKGNAME/repo || exit 1
+              makepkg --packagelist --skippgpcheck --skipinteg --skipchecksums 2>/dev/null
+            " | head -n 1)
 
-            # Use Arch Linux's vercmp tool to compare versions
-            # Output > 0 means AUR_VERSION is newer than CURRENT_RELEASE_VERSION
-            CMP_RESULT=$(vercmp "$AUR_VERSION" "$CURRENT_RELEASE_VERSION")
+            EXPECTED_PKG_NAME=$(basename "$EXPECTED_PKG_PATH")
 
-            if [ "$CMP_RESULT" -gt 0 ]; then
-              echo "  [UPDATE AVAILABLE] Building $PKGNAME ($CURRENT_RELEASE_VERSION -> $AUR_VERSION)..."
+            echo "  Expected Latest Filename: $EXPECTED_PKG_NAME"
 
-              # Perform clean build in /tmp/builds
-              rm -rf /tmp/builds/$PKGNAME
-              mkdir -p /tmp/builds
-              
+            # Check if expected package file already exists in current release assets
+            if echo "$ASSETS" | grep -qFx "$EXPECTED_PKG_NAME"; then
+              echo "  [UP TO DATE] $EXPECTED_PKG_NAME is already in the release."
+            else
+              echo "  [UPDATE AVAILABLE] Building $EXPECTED_PKG_NAME..."
+
+              # Build package as builder user skipping all signature, integrity, and architecture verification checks
               su builder -c "
-                cd /tmp/builds || exit 1
-                git clone https://aur.archlinux.org/${PKGNAME}.git || exit 1
-                cd ${PKGNAME} || exit 1
+                cd /tmp/builds/$PKGNAME/repo || exit 1
 
                 # Specific fix for ryujinx-canary prepare() function
                 if [ \"${PKGNAME}\" = \"ryujinx-canary\" ]; then
@@ -106,29 +89,25 @@ jobs:
                   sed -i '/prepare() {/,/}/c\prepare() {\n  cp \"\$_pkgsrc\"/global.json global.json 2>/dev/null || true\n  rm -f global.json \"\$_pkgsrc\"/global.json\n}' PKGBUILD || true
                 fi
 
-                makepkg -s --noconfirm --skippgpcheck --skipinteg || true
+                makepkg -s --noconfirm --skippgpcheck --skipinteg --skipchecksums --ignorearch || true
               "
 
-              NEW_PKG_PATH=$(find /tmp/builds/$PKGNAME -name "*.pkg.tar.zst" 2>/dev/null | head -n 1)
+              NEW_PKG_PATH=$(find /tmp/builds/$PKGNAME/repo -name "*.pkg.tar.zst" 2>/dev/null | head -n 1)
 
               if [ -n "$NEW_PKG_PATH" ]; then
-                NEW_PKG_NAME=$(basename "$NEW_PKG_PATH")
-                echo "  Uploading new release asset: $NEW_PKG_NAME"
-
-                # Delete old asset if filename changed to prevent orphaned old versions
-                if [ "$ASSET" != "$NEW_PKG_NAME" ]; then
-                  echo "  Deleting old release asset: $ASSET"
-                  gh release delete-asset mr "$ASSET" --repo Methusan105/archconfig -y || true
+                # Find and remove old release asset for this package (if any)
+                OLD_ASSET=$(echo "$ASSETS" | grep -E "^${PKGNAME}-[0-9].*\\.pkg\\.tar\\.zst$" || true)
+                if [ -n "$OLD_ASSET" ] && [ "$OLD_ASSET" != "$EXPECTED_PKG_NAME" ]; then
+                  echo "  Deleting outdated release asset: $OLD_ASSET"
+                  gh release delete-asset mr "$OLD_ASSET" --repo Methusan105/archconfig -y || true
                 fi
 
-                # Upload new file to the release
+                echo "  Uploading new release asset: $EXPECTED_PKG_NAME"
                 gh release upload mr "$NEW_PKG_PATH" --repo Methusan105/archconfig --clobber
                 echo "  Successfully updated $PKGNAME!"
               else
                 echo "  [ERROR] Build completed but no .pkg.tar.zst was generated for $PKGNAME."
               fi
-            else
-              echo "  [UP TO DATE] $PKGNAME is already at the latest version."
             fi
 
             echo "--------------------------------------------------"
