@@ -28,7 +28,7 @@ pacman -S --needed --noconfirm \
   base-devel git linux-zen dkms \
   nvidia-utils lib32-nvidia-utils nvidia-settings \
   vulkan-icd-loader lib32-vulkan-icd-loader \
-  steam lutris wine-staging giflib lib32-giflib \
+  steam lutris wine-staging giflib \
   gamemode lib32-gamemode mangohud lib32-mangohud goverlay vkd3d lib32-vkd3d
 
 echo -e "\e[1;34m[3/6] Setting up yay AUR helper and EnvyControl...\e[0m"
