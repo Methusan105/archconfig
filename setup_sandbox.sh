@@ -134,6 +134,19 @@ case "$MAIN_CHOICE" in
         fi
     fi
 
+    # Spør eksplisitt om Podman system prune
+    if command -v podman &> /dev/null; then
+        echo ""
+        read -p "Vil du rydde opp i ubenyttede Podman-bilder, containere og volum (podman system prune -a --volumes)? (y/N): " CONFIRM_PRUNE
+        if [[ "$CONFIRM_PRUNE" =~ ^[Yy]$ ]]; then
+            echo "Kjører Podman system prune..."
+            podman system prune -a --volumes --force
+            echo "[✓] Podman-systemrydding fullført."
+        else
+            echo "Podman-rydding hoppet over."
+        fi
+    fi
+
     echo ""
     echo "[✓] Opprydding fullført."
     ;;
