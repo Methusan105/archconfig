@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Hvis skriptet startes med sudo via archconfig-cli, start på nytt som vanlig bruker
+if [ -n "$SUDO_USER" ] && [ "$EUID" -eq 0 ]; then
+    echo "[!] Oppdaget sudo. Bytter tilbake til vanlig bruker ($SUDO_USER)..."
+    exec sudo -u "$SUDO_USER" env HOME="/home/$SUDO_USER" "$0" "$@"
+fi
+
 # Avbryt skriptet hvis en kommando feiler
 set -e
 
