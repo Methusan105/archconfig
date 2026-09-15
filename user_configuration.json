@@ -68,7 +68,8 @@
         "qalculate-gtk",
         "zoxide",
         "filelight",
-        "axel"
+        "axel",
+        "pacman-contrib"
     ],
     "pacman_config": {
         "color": true,
