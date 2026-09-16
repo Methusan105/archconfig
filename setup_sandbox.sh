@@ -71,14 +71,14 @@ case "$MAIN_CHOICE" in
         distrobox rm -f "$CONTAINER_NAME"
     fi
 
-    # Oppretter den rene distribusjonen med isolert home
-    distrobox create --name "$CONTAINER_NAME" --image "$CONTAINER_IMG" --home "$CONTAINER_HOME" --yes
+    # Oppretter den rene distribusjonen med isolert home og unshare-all for disk/system-isolering
+    distrobox create --name "$CONTAINER_NAME" --image "$CONTAINER_IMG" --home "$CONTAINER_HOME" --unshare-all --yes
 
     echo ""
     echo "========================================================="
     echo "[✓] DISTROBOX-CONTAINER ER OPPRETTET!"
     echo "========================================================="
-    echo "Distribusjonen er installert og helt isolert fra din ekte hjemmemappe."
+    echo "Distribusjonen er installert og helt isolert fra din ekte hjemmemappe og vertssystemet."
     echo ""
     echo "For å gå inn i den nye sandkassen, kjør denne kommandoen:"
     echo "   distrobox enter $CONTAINER_NAME"
