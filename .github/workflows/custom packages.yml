@@ -20,29 +20,40 @@ jobs:
     steps:
       - name: Update System and Install Base Dependencies
         run: |
-          pacman -Syu --noconfirm --needed git sudo github-cli || true
+          pacman -Syu --noconfirm --needed git sudo github-cli
 
       - name: Setup Unprivileged Builder User
         run: |
-          useradd -m builder || true
-          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers || true
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+      - name: Install AUR Helper (yay)
+        run: |
+          su builder -c "
+            cd /tmp
+            git clone https://aur.archlinux.org/yay-bin.git
+            cd yay-bin
+            makepkg -si --noconfirm
+          "
 
       - name: Clone and Build Package
         run: |
           su builder -c "
-            cd /tmp || true
-            git clone https://aur.archlinux.org/${{ github.event.inputs.package_name }}.git || true
-            cd ${{ github.event.inputs.package_name }} || true
+            cd /tmp
+            git clone https://aur.archlinux.org/${{ github.event.inputs.package_name }}.git
+            cd ${{ github.event.inputs.package_name }}
 
             # Fix prepare() for ryujinx-canary
             if [ \"${{ github.event.inputs.package_name }}\" = \"ryujinx-canary\" ]; then
               echo 'Overriding prepare() in PKGBUILD for ryujinx-canary...'
-              sed -i '/prepare() {/,/}/c\prepare() {\n  cp \"\$_pkgsrc\"/global.json global.json 2>/dev/null || true\n  rm -f global.json \"\$_pkgsrc\"/global.json\n}' PKGBUILD || true
+              sed -i '/prepare() {/,/}/c\prepare() {\n  cp \"\$_pkgsrc\"/global.json global.json 2>/dev/null || true\n  rm -f global.json \"\$_pkgsrc\"/global.json\n}' PKGBUILD
             fi
 
-            # --skippgpcheck skips PGP signature verification
-            # --skipinteg skips MD5, SHA1, SHA256, SHA512 checksum checks
-            makepkg -s --noconfirm --skippgpcheck --skipinteg || true
+            # Automatically install all official and AUR dependencies
+            yay -Sdep --noconfirm --needed --mflags '--skippgpcheck --skipinteg'
+            
+            # Build the package
+            makepkg -s --noconfirm --needed --skippgpcheck --skipinteg
           "
 
       - name: Upload Package to GitHub Release
