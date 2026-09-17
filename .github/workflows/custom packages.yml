@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       package_name:
-        description: 'AUR package name (e.g. ryujinx-canary)'
+        description: 'AUR package name (e.g. geforce-infinity or ryujinx-canary)'
         required: true
         type: string
 
@@ -36,7 +36,7 @@ jobs:
             makepkg -si --noconfirm
           "
 
-      - name: Clone and Build Package
+      - name: Clone, Resolve AUR Dependencies, and Build Package
         run: |
           su builder -c "
             cd /tmp
@@ -49,11 +49,9 @@ jobs:
               sed -i '/prepare() {/,/}/c\prepare() {\n  cp \"\$_pkgsrc\"/global.json global.json 2>/dev/null || true\n  rm -f global.json \"\$_pkgsrc\"/global.json\n}' PKGBUILD
             fi
 
-            # Automatically install all official and AUR dependencies
-            yay -Sdep --noconfirm --needed --mflags '--skippgpcheck --skipinteg'
-            
-            # Build the package
-            makepkg -s --noconfirm --needed --skippgpcheck --skipinteg
+            # Automatically build and install all dependencies (including AUR dependencies like electron37)
+            # then build the target package
+            yay -Bi --noconfirm --mflags '--skippgpcheck --skipinteg'
           "
 
       - name: Upload Package to GitHub Release
