@@ -36,30 +36,20 @@ jobs:
             makepkg -si --noconfirm
           "
 
-      - name: Clone, Resolve AUR Dependencies, and Build Package
+      - name: Build Package & Dependencies via yay
         run: |
           su builder -c "
-            cd /tmp
-            git clone https://aur.archlinux.org/${{ github.event.inputs.package_name }}.git
-            cd ${{ github.event.inputs.package_name }}
-
-            # Fix prepare() for ryujinx-canary
-            if [ \"${{ github.event.inputs.package_name }}\" = \"ryujinx-canary\" ]; then
-              echo 'Overriding prepare() in PKGBUILD for ryujinx-canary...'
-              sed -i '/prepare() {/,/}/c\prepare() {\n  cp \"\$_pkgsrc\"/global.json global.json 2>/dev/null || true\n  rm -f global.json \"\$_pkgsrc\"/global.json\n}' PKGBUILD
-            fi
-
-            # Automatically build and install all dependencies (including AUR dependencies like electron37)
-            # then build the target package
-            yay -Bi --noconfirm --mflags '--skippgpcheck --skipinteg'
+            # Download and build target + AUR dependencies. 
+            # --noinstall builds the .pkg.tar.zst without installing the main package.
+            yay -S --noconfirm --needed --noinstall ${{ github.event.inputs.package_name }}
           "
 
       - name: Upload Package to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Find all .pkg.tar.zst files generated during the build
-          mapfile -t PKG_FILES < <(find /tmp -name "*.pkg.tar.zst" 2>/dev/null)
+          # Locate all compiled package archives created inside builder's home directory
+          mapfile -t PKG_FILES < <(find /home/builder/.cache/yay/ -name "*.pkg.tar.zst" 2>/dev/null)
 
           if [ ${#PKG_FILES[@]} -eq 0 ]; then
             echo "Error: No .pkg.tar.zst files found after build attempt."
@@ -69,5 +59,5 @@ jobs:
           echo "Found ${#PKG_FILES[@]} package file(s):"
           printf '%s\n' "${PKG_FILES[@]}"
 
-          # Upload all found files to the release
+          # Upload all found binary packages to the GitHub release
           gh release upload mr "${PKG_FILES[@]}" --repo Methusan105/archconfig --clobber
