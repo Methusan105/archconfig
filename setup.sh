@@ -92,6 +92,64 @@ if [[ ! -f /etc/arch-release ]]; then
 fi
 
 #################################################
+# REMOVE ANY KDE / PLASMA REMNANTS
+#################################################
+# archinstall sin Hyprland-profil har historisk sniket med enkelte
+# KDE-pakker (f.eks. dolphin, polkit-kde-agent) selv om Plasma ikke er
+# valgt. Denne seksjonen fjerner dem uansett om de kom fra archinstall,
+# en avhengighet, eller ble installert ved en feil - trygt å kjøre selv
+# om ingen av dem finnes.
+
+echo "=== Removing any KDE / Plasma remnants ==="
+
+KDE_PACKAGES=(
+    plasma-meta
+    plasma-desktop
+    plasma-workspace
+    plasma-nm
+    plasma-pa
+    plasma-systemmonitor
+    kwin
+    kglobalaccel
+    kactivitymanagerd
+    kscreen
+    kdeconnect
+    kde-cli-tools
+    kio-admin
+    kinfocenter
+    systemsettings
+    sddm-kcm
+    discover
+    dolphin
+    dolphin-plugins
+    konsole
+    kate
+    krusader
+    kwalletmanager
+    kwallet
+    kwalletd
+    filelight
+    falkon
+    breeze
+    breeze-gtk
+    polkit-kde-agent
+)
+
+TO_REMOVE=()
+for pkg in "${KDE_PACKAGES[@]}"; do
+    if pacman -Qi "$pkg" >/dev/null 2>&1; then
+        TO_REMOVE+=("$pkg")
+    fi
+done
+
+if [[ ${#TO_REMOVE[@]} -gt 0 ]]; then
+    echo "Found KDE/Plasma packages, removing: ${TO_REMOVE[*]}"
+    pacman -Rns --noconfirm "${TO_REMOVE[@]}" || true
+else
+    echo "No KDE/Plasma packages found. Nothing to remove."
+fi
+
+#################################################
 # BASE PACKAGES
 #################################################
 
@@ -138,8 +196,7 @@ pacman -S --needed --noconfirm \
     github-release-uploader \
     qemu-iso-disk-launcher \
     stremio \
-    vscodium-bin \
-    yay
+    vscodium-bin
 
 #################################################
 # YAY
