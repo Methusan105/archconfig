@@ -77,15 +77,15 @@
     },
     "profile_config": {
         "gfx_driver": "Intel (open-source)",
-        "greeter": "plasma-login-manager",
+        "greeter": "sddm",
         "profile": {
             "custom_settings": {
-                "KDE Plasma": {
-                    "plasma_flavor": "plasma-meta"
+                "Hyprland": {
+                    "seat_access": "polkit"
                 }
             },
             "details": [
-                "KDE Plasma"
+                "Hyprland"
             ],
             "main": "Desktop"
         }
