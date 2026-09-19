@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       package_name:
-        description: 'AUR package name (e.g. ryujinx-canary)'
+        description: 'AUR package name (e.g. spotify, ryujinx-canary)'
         required: true
         type: string
 
@@ -20,7 +20,7 @@ jobs:
     steps:
       - name: Update System and Install Base Dependencies
         run: |
-          pacman -Syu --noconfirm --needed git sudo github-cli || true
+          pacman -Syu --noconfirm --needed git sudo github-cli gnupg curl || true
 
       - name: Setup Unprivileged Builder User
         run: |
@@ -34,14 +34,19 @@ jobs:
             git clone https://aur.archlinux.org/${{ github.event.inputs.package_name }}.git || true
             cd ${{ github.event.inputs.package_name }} || true
 
+            # Spotify GPG key import
+            if [ \"${{ github.event.inputs.package_name }}\" = \"spotify\" ]; then
+              echo 'Importing Spotify OpenPGP key...'
+              curl -sS https://download.spotify.com/debian/pubkey_5384CE82BA52C83A.gpg | gpg --import -
+            fi
+
             # Fix prepare() for ryujinx-canary
             if [ \"${{ github.event.inputs.package_name }}\" = \"ryujinx-canary\" ]; then
               echo 'Overriding prepare() in PKGBUILD for ryujinx-canary...'
               sed -i '/prepare() {/,/}/c\prepare() {\n  cp \"\$_pkgsrc\"/global.json global.json 2>/dev/null || true\n  rm -f global.json \"\$_pkgsrc\"/global.json\n}' PKGBUILD || true
             fi
 
-            # --skippgpcheck skips PGP signature verification
-            # --skipinteg skips MD5, SHA1, SHA256, SHA512 checksum checks
+            # Build package
             makepkg -s --noconfirm || true
           "
 
@@ -49,7 +54,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Find all .pkg.tar.zst files generated during the build
           mapfile -t PKG_FILES < <(find /tmp -name "*.pkg.tar.zst" 2>/dev/null)
 
           if [ ${#PKG_FILES[@]} -eq 0 ]; then
@@ -60,5 +64,4 @@ jobs:
           echo "Found ${#PKG_FILES[@]} package file(s):"
           printf '%s\n' "${PKG_FILES[@]}"
 
-          # Upload all found files to the release
           gh release upload mr "${PKG_FILES[@]}" --repo Methusan105/archconfig --clobber
