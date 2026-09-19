@@ -44,8 +44,8 @@
     },
     "ntp": true,
     "packages": [
-        "kitty",
-        "pcmanfm-qt",
+        "konsole",
+        "dolphin",
         "zip",
         "unzip",
         "vlc",
@@ -55,18 +55,19 @@
         "aria2",
         "ntfs-3g",
         "fastfetch",
-        "seahorse",
+        "kwalletmanager",
+        "falkon",
         "ffmpeg",
         "libnotify",
-        "mako",
         "qt6-base",
         "qt6-multimedia",
         "sox",
+        "kate",
         "cpupower",
         "hdparm",
         "qalculate-gtk",
         "zoxide",
-        "baobab",
+        "filelight",
         "axel",
         "pacman-contrib"
     ],
@@ -76,15 +77,15 @@
     },
     "profile_config": {
         "gfx_driver": "Intel (open-source)",
-        "greeter": "sddm",
+        "greeter": "plasma-login-manager",
         "profile": {
             "custom_settings": {
-                "Hyprland": {
-                    "seat_access": "polkit"
+                "KDE Plasma": {
+                    "plasma_flavor": "plasma-meta"
                 }
             },
             "details": [
-                "Hyprland"
+                "KDE Plasma"
             ],
             "main": "Desktop"
         }
