@@ -138,7 +138,8 @@ pacman -S --needed --noconfirm \
     github-release-uploader \
     qemu-iso-disk-launcher \
     stremio \
-    vscodium-bin
+    vscodium-bin \
+    yay
 
 #################################################
 # YAY
