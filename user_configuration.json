@@ -23,20 +23,15 @@
         "sys_lang": "nb_NO.UTF-8"
     },
     "mirror_config": {
-        "custom_repositories": [],
+        "custom_repositories": [
+            {
+                "name": "custom",
+                "urls": ["file:///root/repo"],
+                "siglevel": ["Optional", "TrustAll"]
+            }
+        ],
         "custom_servers": [],
-        "mirror_regions": {
-            "Norway": [
-                "http://mirror.archlinux.no/$repo/os/$arch",
-                "https://mirror.archlinux.no/$repo/os/$arch",
-                "http://archlinux.uib.no/$repo/os/$arch",
-                "http://mirror.neuf.no/archlinux/$repo/os/$arch",
-                "https://mirror.neuf.no/archlinux/$repo/os/$arch",
-                "https://archlinux.lysakermoen.com/$repo/os/$arch",
-                "http://no.mirror.cx/archlinux/$repo/os/$arch",
-                "https://no.mirror.cx/archlinux/$repo/os/$arch"
-            ]
-        },
+        "mirror_regions": {},
         "optional_repositories": []
     },
     "network_config": {
