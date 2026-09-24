@@ -1,7 +1,11 @@
 name: Preload Arch Linux Packages
 
 on:
-  workflow_dispatch: # Gjør det mulig å starte prosessen manuelt fra GitHub-nettsiden
+  workflow_dispatch: # Gjør det mulig å starte prosessen manuelt fra Actions-fanen
+
+# Denne seksjonen gir skriptet lov til å opprette en Release og laste opp ZIP-filen
+permissions:
+  contents: write
 
 jobs:
   build-packages:
@@ -48,7 +52,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: arch-offline-packages.zip
-          tag_name: ${{ github.ref_name == 'main' && 'latest' || github.ref_name }} # Legger den på 'latest'-taggen hvis du kjører fra main
+          tag_name: "latest" # Tvinger taggen til å hete 'latest' i stedet for refs/heads/main
           name: "Arch Offline Packages"
           draft: false
           prerelease: false
