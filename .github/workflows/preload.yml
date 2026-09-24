@@ -1,14 +1,13 @@
 name: Preload Arch Linux Packages
 
 on:
-  release:
-    types: [published] # Kjører automatisk når du publiserer en ny Release
+  workflow_dispatch: # Gjør det mulig å starte prosessen manuelt fra GitHub-nettsiden
 
 jobs:
   build-packages:
     runs-on: ubuntu-latest
     container:
-      image: archlinux:latest # Kjører i et offisielt Arch Linux-miljø
+      image: archlinux:latest
       options: --privileged
 
     steps:
@@ -39,12 +38,9 @@ jobs:
 
       - name: Inkluder json-konfigurasjon og pakk til ZIP
         run: |
-          # Kopierer json-filen din inn i samme struktur før zipping
           if [ -f "user_configuration.json" ]; then
             cp user_configuration.json build/
           fi
-          
-          # Lager ZIP-filen
           cd build
           zip -r ../arch-offline-packages.zip .
 
@@ -52,5 +48,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: arch-offline-packages.zip
+          tag_name: ${{ github.ref_name == 'main' && 'latest' || github.ref_name }} # Legger den på 'latest'-taggen hvis du kjører fra main
+          name: "Arch Offline Packages"
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
