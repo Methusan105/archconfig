@@ -1,0 +1,56 @@
+name: Preload Arch Linux Packages
+
+on:
+  release:
+    types: [published] # Kjører automatisk når du publiserer en ny Release
+
+jobs:
+  build-packages:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest # Kjører i et offisielt Arch Linux-miljø
+      options: --privileged
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: System oppdatering og installasjon av verktøy
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm pacman-contrib zip
+
+      - name: Opprett mapper
+        run: |
+          mkdir -p build/pkg
+
+      - name: Last ned alle pakker og avhengigheter
+        run: |
+          pacman -Sw --noconfirm --cachedir build/pkg \
+          base base-devel linux-zen linux-firmware grub networkmanager plasma-meta \
+          konsole dolphin zip unzip vlc vlc-plugins-all mission-center transmission-qt \
+          aria2 ntfs-3g fastfetch kwalletmanager falkon ffmpeg libnotify qt6-base \
+          qt6-multimedia sox kate cpupower hdparm qalculate-gtk zoxide filelight axel pacman-contrib
+
+      - name: Generer lokal pakkedatabase
+        run: |
+          cd build/pkg
+          repo-add ./custom.db.tar.zst *.pkg.tar.zst
+
+      - name: Inkluder json-konfigurasjon og pakk til ZIP
+        run: |
+          # Kopierer json-filen din inn i samme struktur før zipping
+          if [ -f "user_configuration.json" ]; then
+            cp user_configuration.json build/
+          fi
+          
+          # Lager ZIP-filen
+          cd build
+          zip -r ../arch-offline-packages.zip .
+
+      - name: Last opp ZIP-filen til GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: arch-offline-packages.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
