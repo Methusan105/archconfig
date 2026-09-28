@@ -1,1 +1,10 @@
-read -p "Enter input file: " file && sed -n '/"headers": {/,/  },/{ s/.*"headers": //; s/  },/}/; p }' "$file" > browser.json
+read -p "Enter input file: " file && sed -nE '
+  /"accept":/ { i\
+{
+  }
+  /"(accept|authorization|content-type|x-goog-authuser|x-origin|x-youtube-bootstrap-logged-in|x-youtube-client-name|x-youtube-client-version)":/ p
+  /"cookie":/ {
+    s/,\s*$/\n}/
+    p
+  }
+' "$file" > browser.json
