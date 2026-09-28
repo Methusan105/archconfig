@@ -1,0 +1,265 @@
+import csv
+import time
+from ytmusicapi import YTMusic
+
+# ==========================================
+# INNSTILLINGER
+# ==========================================
+
+CSV_FILE = "/home/methu/youtube-music-importer/Liked_Songs.csv"
+
+PLAYLIST_NAME = "Liked Songs"
+PLAYLIST_DESCRIPTION = "From Spotify"
+
+MAX_RETRIES = 4
+
+# Ventetid mellom normale sanger
+DELAY = 0.3
+
+# Ventetid etter API-feil
+RETRY_DELAY = 3
+
+
+# ==========================================
+# YOUTUBE MUSIC
+# ==========================================
+
+yt = YTMusic("browser.json")
+
+
+# ==========================================
+# OPPRETT PLAYLIST
+# ==========================================
+
+playlist_id = yt.create_playlist(
+    PLAYLIST_NAME,
+    PLAYLIST_DESCRIPTION
+)
+
+print()
+print(f"Opprettet spilleliste: '{PLAYLIST_NAME}'")
+print(f"ID: {playlist_id}")
+print()
+
+
+# ==========================================
+# LES CSV
+# ==========================================
+
+songs = []
+
+with open(
+    CSV_FILE,
+    mode="r",
+    encoding="utf-8-sig",
+    newline=""
+) as file:
+
+    reader = csv.DictReader(file)
+
+    print("Kolonner:")
+    print(reader.fieldnames)
+    print()
+
+    for row in reader:
+
+        artist = row.get("Artist Name(s)", "").strip()
+        title = row.get("Track Name", "").strip()
+
+        if not title:
+            continue
+
+        songs.append({
+            "artist": artist,
+            "title": title,
+        })
+
+
+total = len(songs)
+
+print(f"Fant {total} sanger.")
+print()
+
+
+# ==========================================
+# FAILED SONGS
+# ==========================================
+
+failed_songs = []
+
+
+# ==========================================
+# IMPORTER
+# ==========================================
+
+added = 0
+
+for number, song in enumerate(songs, start=1):
+
+    artist = song["artist"]
+    title = song["title"]
+
+    query = f"{artist} {title}".strip()
+
+    print(
+        f"[{number}/{total}] "
+        f"Søker etter: {query}"
+    )
+
+    success = False
+
+    for attempt in range(1, MAX_RETRIES + 1):
+
+        try:
+
+            # --------------------------
+            # SØK
+            # --------------------------
+
+            search_results = yt.search(
+                query,
+                filter="songs"
+            )
+
+            if not search_results:
+
+                print("    ❌ Fant ikke")
+
+                failed_songs.append({
+                    "artist": artist,
+                    "title": title,
+                    "reason": "No search results"
+                })
+
+                break
+
+
+            # --------------------------
+            # HENT VIDEO ID
+            # --------------------------
+
+            track_id = search_results[0]["videoId"]
+
+
+            # --------------------------
+            # LEGG TIL
+            # --------------------------
+
+            yt.add_playlist_items(
+                playlist_id,
+                [track_id]
+            )
+
+            added += 1
+
+            print(
+                f"    ✓ Lagt til "
+                f"({added}/{total})"
+            )
+
+            success = True
+
+            # Normal liten pause
+            time.sleep(DELAY)
+
+            break
+
+
+        except KeyboardInterrupt:
+
+            print()
+            print("STOPPET AV BRUKER.")
+            print()
+
+            # Lagre det vi har funnet så langt
+            break
+
+
+        except Exception as e:
+
+            print(
+                f"    ⚠️ API-feil "
+                f"(forsøk {attempt}/{MAX_RETRIES})"
+            )
+
+            print(
+                f"       {e}"
+            )
+
+            if attempt < MAX_RETRIES:
+
+                wait = RETRY_DELAY * attempt
+
+                print(
+                    f"       Venter {wait}s før nytt forsøk..."
+                )
+
+                time.sleep(wait)
+
+            else:
+
+                print(
+                    "    ❌ Hopper over denne sangen."
+                )
+
+                failed_songs.append({
+                    "artist": artist,
+                    "title": title,
+                    "reason": str(e)
+                })
+
+
+    if not success:
+        print()
+
+
+# ==========================================
+# LAGRE FEILEDE SANGER
+# ==========================================
+
+if failed_songs:
+
+    with open(
+        "failed_songs.csv",
+        "w",
+        encoding="utf-8",
+        newline=""
+    ) as file:
+
+        writer = csv.DictWriter(
+            file,
+            fieldnames=[
+                "artist",
+                "title",
+                "reason"
+            ]
+        )
+
+        writer.writeheader()
+        writer.writerows(failed_songs)
+
+
+# ==========================================
+# FERDIG
+# ==========================================
+
+print()
+print("=" * 55)
+print("FERDIG")
+print("=" * 55)
+
+print(f"Totalt i CSV:       {total}")
+print(f"Importert:          {added}")
+print(f"Feilet/ikke funnet: {len(failed_songs)}")
+print(f"Playlist ID:        {playlist_id}")
+
+if failed_songs:
+
+    print()
+    print(
+        "De som feilet er lagret i:"
+    )
+
+    print(
+        "failed_songs.csv"
+    )
