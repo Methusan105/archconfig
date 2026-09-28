@@ -1,0 +1,1 @@
+read -p "Enter input file: " file && sed -n '/"headers": {/,/  },/{ s/.*"headers": //; s/  },/}/; p }' "$file" > browser.json
