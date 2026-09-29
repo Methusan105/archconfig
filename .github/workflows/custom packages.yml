@@ -46,10 +46,11 @@ jobs:
               sed -i '/prepare() {/,/}/c\prepare() {\n  cp \"\$_pkgsrc\"/global.json global.json 2>/dev/null || true\n  rm -f global.json \"\$_pkgsrc\"/global.json\n}' PKGBUILD || true
             fi
 
-            # Update pkgver for freesmlauncher
+            # Update pkgver and skip checksum check for freesmlauncher
             if [ \"${{ github.event.inputs.package_name }}\" = \"freesmlauncher\" ]; then
               echo 'Updating pkgver to 2.3.1 for freesmlauncher...'
               sed -i 's/^pkgver=2\.3\.0$/pkgver=2.3.1/' PKGBUILD || true
+              sed -i \"s/^sha256sums=(.*/sha256sums=('SKIP')/\" PKGBUILD || true
             fi
 
             # Build package
