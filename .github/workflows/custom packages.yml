@@ -46,6 +46,12 @@ jobs:
               sed -i '/prepare() {/,/}/c\prepare() {\n  cp \"\$_pkgsrc\"/global.json global.json 2>/dev/null || true\n  rm -f global.json \"\$_pkgsrc\"/global.json\n}' PKGBUILD || true
             fi
 
+            # Update pkgver for freesmlauncher
+            if [ \"${{ github.event.inputs.package_name }}\" = \"freesmlauncher\" ]; then
+              echo 'Updating pkgver to 2.3.1 for freesmlauncher...'
+              sed -i 's/^pkgver=2\.3\.0$/pkgver=2.3.1/' PKGBUILD || true
+            fi
+
             # Build package
             makepkg -s --noconfirm || true
           "
