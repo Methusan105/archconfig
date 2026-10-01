@@ -58,7 +58,7 @@ jobs:
               echo 'Updating pkgver to 1.0.1 for OpenNOW...'
               sed -i 's/^pkgver=.*/pkgver=1.0.1/' PKGBUILD || true
               sed -i 's/^_pkgver=.*/_pkgver=1.0.1/' PKGBUILD || true
-              sed -i "/^sha256sums=(/,/)/c\sha256sums=('SKIP' 'SKIP' 'SKIP')" PKGBUILD || true
+              sed -i '/^sha256sums=(/,/)/c\sha256sums=(\x27SKIP\x27 \x27SKIP\x27 \x27SKIP\x27)' PKGBUILD || true
             fi
 
             # Build package
