@@ -23,7 +23,7 @@ jobs:
           pacman -Syu --noconfirm --needed git sudo github-cli gnupg curl cmake \
             qt6-base qt6-declarative qt6-5compat qt6-multimedia qt6-svg \
             qt6-wayland qt6-tools qt6-websockets qt6-shadertools \
-            vulkan-headers vulkan-icd-loader || true
+            vulkan-headers vulkan-icd-loader wayland wayland-protocols || true
 
       - name: Setup Unprivileged Builder User
         run: |
