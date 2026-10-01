@@ -53,10 +53,12 @@ jobs:
               sed -i \"s/^sha256sums=(.*/sha256sums=('SKIP')/\" PKGBUILD || true
             fi
             
+            # Update pkgver, _pkgver, and replace multi-line sha256sums for opennow
             if [ \"${{ github.event.inputs.package_name }}\" = \"opennow\" ]; then
-              echo 'Updating pkgver to 2.3.1 for OpenNOW...'
-              sed -i 's/^pkgver=0\.5\.5$/pkgver=1.0.1/' PKGBUILD || true
-              sed -i \"s/^sha256sums=(.*/sha256sums=('SKIP')/\" PKGBUILD || true
+              echo 'Updating pkgver to 1.0.1 for OpenNOW...'
+              sed -i 's/^pkgver=.*/pkgver=1.0.1/' PKGBUILD || true
+              sed -i 's/^_pkgver=.*/_pkgver=1.0.1/' PKGBUILD || true
+              sed -i "/^sha256sums=(/,/)/c\sha256sums=('SKIP' 'SKIP' 'SKIP')" PKGBUILD || true
             fi
 
             # Build package
