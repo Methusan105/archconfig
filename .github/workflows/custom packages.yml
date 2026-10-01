@@ -53,17 +53,17 @@ jobs:
               sed -i \"s/^sha256sums=(.*/sha256sums=('SKIP')/\" PKGBUILD || true
             fi
             
-            # Fix PKGBUILD for OpenNOW 1.0.1 structure
+            # Oppdater pkgver og fiks stier for OpenNOW 1.0.1
             if [ \"${{ github.event.inputs.package_name }}\" = \"opennow\" ]; then
               echo 'Updating pkgver and fixing source directory paths for OpenNOW 1.0.1...'
               sed -i 's/^pkgver=.*/pkgver=1.0.1/' PKGBUILD || true
               sed -i 's/^_pkgver=.*/_pkgver=1.0.1/' PKGBUILD || true
               sed -i '/^sha256sums=(/,/)/c\sha256sums=(\x27SKIP\x27 \x27SKIP\x27 \x27SKIP\x27)' PKGBUILD || true
 
-              # Remove obsolete "cd opennow-stable" commands
+              # Fjern utdaterte cd-kommandoer
               sed -i '/cd opennow-stable/d' PKGBUILD || true
 
-              # Remove "opennow-stable/" path prefixes from PKGBUILD
+              # Fjern opennow-stable/ fra alle stier i PKGBUILD
               sed -i 's/opennow-stable\///g' PKGBUILD || true
             fi
 
