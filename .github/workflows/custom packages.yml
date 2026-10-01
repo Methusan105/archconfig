@@ -24,7 +24,8 @@ jobs:
             clang llvm \
             qt6-base qt6-declarative qt6-5compat qt6-multimedia qt6-svg \
             qt6-wayland qt6-tools qt6-websockets qt6-shadertools \
-            vulkan-headers vulkan-icd-loader wayland wayland-protocols || true
+            vulkan-headers vulkan-icd-loader wayland wayland-protocols \
+            imagemagick libxcrypt-compat cargo npm || true
 
       - name: Setup Unprivileged Builder User
         run: |
