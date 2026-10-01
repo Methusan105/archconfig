@@ -20,7 +20,9 @@ jobs:
     steps:
       - name: Update System and Install Base Dependencies
         run: |
-          pacman -Syu --noconfirm --needed git sudo github-cli gnupg curl cmake qt6-base || true
+          pacman -Syu --noconfirm --needed git sudo github-cli gnupg curl cmake \
+            qt6-base qt6-declarative qt6-5compat qt6-multimedia qt6-svg \
+            qt6-wayland qt6-tools qt6-websockets qt6-shadertools || true
 
       - name: Setup Unprivileged Builder User
         run: |
