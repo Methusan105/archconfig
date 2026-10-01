@@ -58,18 +58,26 @@ jobs:
               sed -i \"s/^sha256sums=(.*/sha256sums=('SKIP')/\" PKGBUILD || true
             fi
             
-            # Oppdater pkgver og fiks stier for OpenNOW 1.0.1
-            if [ \"${{ github.event.inputs.package_name }}\" = \"opennow\" ]; then
-              echo 'Updating pkgver and fixing source directory paths for OpenNOW 1.0.1...'
+            # Fix PKGBUILD and build environment for OpenNOW 1.0.1
+            if [ "${{ github.event.inputs.package_name }}" = "opennow" ]; then
+              echo 'Updating pkgver and build flags for OpenNOW 1.0.1...'
+              
+              # 1. Update pkgver and _pkgver to 1.0.1
               sed -i 's/^pkgver=.*/pkgver=1.0.1/' PKGBUILD || true
               sed -i 's/^_pkgver=.*/_pkgver=1.0.1/' PKGBUILD || true
+              
+              # 2. Safely override sha256sums array
               sed -i '/^sha256sums=(/,/)/c\sha256sums=(\x27SKIP\x27 \x27SKIP\x27 \x27SKIP\x27)' PKGBUILD || true
 
-              # Fjern utdaterte cd-kommandoer
+              # 3. Remove non-existent opennow-stable path operations
               sed -i '/cd opennow-stable/d' PKGBUILD || true
-
-              # Fjern opennow-stable/ fra alle stier i PKGBUILD
               sed -i 's/opennow-stable\///g' PKGBUILD || true
+
+              # 4. Export compiler flags for Rust ring-core assembly compilation
+              export CC=clang
+              export CXX=clang++
+              export CFLAGS=""
+              export LDFLAGS=""
             fi
 
             # Build package
