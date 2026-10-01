@@ -52,6 +52,12 @@ jobs:
               sed -i 's/^pkgver=2\.3\.0$/pkgver=2.3.1/' PKGBUILD || true
               sed -i \"s/^sha256sums=(.*/sha256sums=('SKIP')/\" PKGBUILD || true
             fi
+            
+            if [ \"${{ github.event.inputs.package_name }}\" = \"opennow\" ]; then
+              echo 'Updating pkgver to 2.3.1 for OpenNOW...'
+              sed -i 's/^pkgver=0\.5\.5$/pkgver=1.0.1/' PKGBUILD || true
+              sed -i \"s/^sha256sums=(.*/sha256sums=('SKIP')/\" PKGBUILD || true
+            fi
 
             # Build package
             makepkg -s --noconfirm || true
