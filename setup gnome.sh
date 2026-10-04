@@ -198,7 +198,6 @@ echo "=== Installing AUR packages ==="
 sudo -u "$REAL_USER" yay -S --needed --noconfirm \
     brave-origin-bin \
     warp-cli \
-    spotify \
     gotohp-bin \
     galaxybudsclient-bin \
     preload
