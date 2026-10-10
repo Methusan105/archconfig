@@ -70,15 +70,13 @@
     },
     "profile_config": {
         "gfx_driver": "Intel (open-source)",
-        "greeter": "plasma-login-manager",
+        "greeter": "gdm",
         "profile": {
             "custom_settings": {
-                "KDE Plasma": {
-                    "plasma_flavor": "plasma-meta"
-                }
+                "GNOME": {}
             },
             "details": [
-                "KDE Plasma"
+                "GNOME"
             ],
             "main": "Desktop"
         }
