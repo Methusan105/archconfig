@@ -25,12 +25,6 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # ROOT / USER SETUP
 #################################################
 
-# Run as a normal user:
-#
-#     ./setup.sh
-#
-# The script automatically re-runs itself with sudo.
-
 if [[ $EUID -ne 0 ]]; then
     echo "=== Root privileges required ==="
     echo "Requesting sudo..."
@@ -38,8 +32,6 @@ if [[ $EUID -ne 0 ]]; then
 
     exec sudo -E bash "$SCRIPT_DIR/setup.sh" "$@"
 fi
-
-# Determine the user who originally launched the script.
 
 if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
     REAL_USER="$SUDO_USER"
@@ -131,18 +123,16 @@ pacman -Syu --needed --noconfirm \
 
 echo "=== Configuring MethuRepo ==="
 
-# Remove an existing MethuRepo block safely.
 sed -i \
     '/^[[:space:]]*\[methurepos\][[:space:]]*$/,/^[[:space:]]*Server[[:space:]]*=/d' \
     /etc/pacman.conf
 
-# Add repo if it does not already exist.
 if ! grep -q '^\[methurepos\]' /etc/pacman.conf; then
     cat >> /etc/pacman.conf <<'EOF'
 
 [methurepos]
 SigLevel = Optional
-Server = https://github.com/Methusan105/archconfig/releases/download/mr
+Server = https://github.com/methusan105/archconfig/releases/download/mr
 EOF
 fi
 
@@ -160,34 +150,8 @@ pacman -S --needed --noconfirm \
     github-release-uploader \
     qemu-iso-disk-launcher \
     stremio \
-    vscodium-bin
-
-#################################################
-# YAY
-#################################################
-
-echo "=== Installing yay ==="
-
-if ! command -v yay >/dev/null 2>&1; then
-
-    rm -rf /tmp/yay
-
-    git clone --depth=1 \
-        https://aur.archlinux.org/yay.git \
-        /tmp/yay
-
-    chown -R "$REAL_USER:$REAL_USER" /tmp/yay
-
-    sudo -u "$REAL_USER" bash -c '
-        cd /tmp/yay
-        makepkg -si --noconfirm
-    '
-
-    rm -rf /tmp/yay
-
-else
-    echo "yay is already installed."
-fi
+    vscodium-bin \
+    yay
 
 #################################################
 # AUR PACKAGES
@@ -198,7 +162,6 @@ echo "=== Installing AUR packages ==="
 sudo -u "$REAL_USER" yay -S --needed --noconfirm \
     brave-origin-bin \
     warp-cli \
-    gotohp-bin \
     galaxybudsclient-bin \
     preload
 
@@ -227,7 +190,7 @@ systemctl enable --now irqbalance.service
 echo "=== Installing SpotX ==="
 
 sudo -u "$REAL_USER" bash -c \
-    'bash <(curl -fsSL https://spotx-official.github.io/run.sh)'
+    'bash <(curl -fsSL https://github.io)'
 
 #################################################
 # FLATHUB
@@ -237,7 +200,7 @@ echo "=== Adding Flathub ==="
 
 flatpak remote-add --if-not-exists \
     flathub \
-    https://flathub.org/repo/flathub.flatpakrepo
+    https://flathub.org
 
 #################################################
 # RAM FLUSH
@@ -305,7 +268,6 @@ python3 -m pip install --break-system-packages undervolt
 UNDERVOLT="$(command -v undervolt || true)"
 
 if [[ -n "$UNDERVOLT" ]]; then
-
     echo "undervolt found at: $UNDERVOLT"
 
     cat > /etc/systemd/system/undervolt.service <<EOF
@@ -325,13 +287,9 @@ EOF
 
     systemctl daemon-reload
     systemctl enable undervolt.service
-
     systemctl start undervolt.service || true
-
 else
-
     echo "WARNING: undervolt command was not found."
-
 fi
 
 #################################################
@@ -340,13 +298,11 @@ fi
 
 echo "=== Configuring PipeWire + Bluetooth for GNOME ==="
 
-# Remove PulseAudio if present.
 pacman -Rns --noconfirm \
     pulseaudio \
     pulseaudio-bluetooth \
     2>/dev/null || true
 
-# GNOME does not use Plasma's bluedevil/plasma-pa.
 pacman -S --needed --noconfirm \
     pipewire \
     pipewire-pulse \
@@ -384,7 +340,6 @@ chown -R "$REAL_USER:$REAL_USER" \
 echo "=== Restarting user PipeWire services ==="
 
 if [[ -d "$USER_RUNTIME" ]]; then
-
     sudo -u "$REAL_USER" \
         XDG_RUNTIME_DIR="$USER_RUNTIME" \
         DBUS_SESSION_BUS_ADDRESS="unix:path=$USER_RUNTIME/bus" \
@@ -398,12 +353,8 @@ if [[ -d "$USER_RUNTIME" ]]; then
         pipewire-pulse \
         wireplumber \
         2>/dev/null || true
-
 else
-
     echo "WARNING: User runtime directory does not exist."
-    echo "PipeWire will start normally after the user logs into GNOME."
-
 fi
 
 #################################################
@@ -411,8 +362,6 @@ fi
 #################################################
 
 echo "=== Installing Intel video acceleration ==="
-
-# Modern Intel graphics do not need the legacy Xorg Intel driver.
 
 pacman -R --noconfirm \
     xf86-video-intel \
@@ -424,7 +373,7 @@ pacman -S --needed --noconfirm \
     intel-gpu-tools
 
 #################################################
-# GRUB DEEP SLEEP FIX
+# GRUB DEEP SLEEP FIX & CONFIG
 #################################################
 
 echo "=== Configuring GRUB ==="
@@ -434,83 +383,35 @@ if [[ ! -f /etc/default/grub ]]; then
     exit 1
 fi
 
-GRUB_CMDLINE='systemd.show_status=true mem_sleep_default=deep acpi_osi=Linux pcie_aspm=off ignore_loglevel systemd.log_level=debug systemd.log_target=kmsg log_buf_len=16M devkmsg=on'
+GRUB_CMDLINE="systemd.show_status=true mem_sleep_default=deep acpi_osi=Linux pcie_aspm=off ignore_loglevel systemd.log_level=debug systemd.log_target=kmsg log_buf_len=16M devkmsg=on"
 
 if grep -q '^GRUB_CMDLINE_LINUX_DEFAULT=' /etc/default/grub; then
-
-    sed -i \
-        "s|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"$GRUB_CMDLINE\"|" \
-        /etc/default/grub
-
+    sed -i "s|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"$GRUB_CMDLINE\"|" /etc/default/grub
 else
-
-    echo "GRUB_CMDLINE_LINUX_DEFAULT=\"$GRUB_CMDLINE\"" \
-        >> /etc/default/grub
-
+    echo "GRUB_CMDLINE_LINUX_DEFAULT=\"$GRUB_CMDLINE\"" >> /etc/default/grub
 fi
-
-#################################################
-# GRUB PACKAGES
-#################################################
 
 echo "=== Installing GRUB + os-prober ==="
-
-pacman -S --needed --noconfirm \
-    grub \
-    os-prober
-
-#################################################
-# OS PROBER
-#################################################
+pacman -S --needed --noconfirm grub os-prober
 
 echo "=== Enabling os-prober ==="
-
 if grep -q '^GRUB_DISABLE_OS_PROBER=' /etc/default/grub; then
-
-    sed -i \
-        's/^GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=false/' \
-        /etc/default/grub
-
+    sed -i 's/^GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub
 else
-
-    echo 'GRUB_DISABLE_OS_PROBER=false' \
-        >> /etc/default/grub
-
+    echo 'GRUB_DISABLE_OS_PROBER=false' >> /etc/default/grub
 fi
 
-#################################################
-# EFI LOCATION
-#################################################
-
 echo "=== Detecting EFI partition ==="
-
 if mountpoint -q /efi; then
-
     EFI_DIR="/efi"
-
 elif mountpoint -q /boot/efi; then
-
     EFI_DIR="/boot/efi"
-
 else
-
     echo "ERROR: EFI partition is not mounted."
-    echo ""
-    echo "Expected either:"
-    echo "  /efi"
-    echo "  /boot/efi"
-    echo ""
     exit 1
 fi
 
-echo "EFI directory: $EFI_DIR"
-
-#################################################
-# GRUB INSTALL
-#################################################
-
 echo "=== Installing GRUB ==="
-
 grub-install \
     --target=x86_64-efi \
     --efi-directory="$EFI_DIR" \
@@ -518,50 +419,33 @@ grub-install \
     --recheck
 
 #################################################
-# ARCH ISO + WINDOWS INSTALLER
+# ARCH ISO + WINDOWS INSTALLER CUSTOM GRUB
 #################################################
 
 echo "=== Configuring custom GRUB entries ==="
-
 CUSTOM_FILE="/etc/grub.d/40_custom"
-
 touch "$CUSTOM_FILE"
 
-# Remove our previous custom entries if the script has been run before.
-sed -i \
-    '/menuentry "Arch Linux Installer ISO"/,/^}/d' \
-    "$CUSTOM_FILE"
-
-sed -i \
-    '/menuentry "Windows Installer"/,/^}/d' \
-    "$CUSTOM_FILE"
+sed -i '/menuentry "Arch Linux Installer ISO"/,/^}/d' "$CUSTOM_FILE"
+sed -i '/menuentry "Windows Installer"/,/^}/d' "$CUSTOM_FILE"
 
 cat >> "$CUSTOM_FILE" <<'EOF'
-
 menuentry "Arch Linux Installer ISO" --id arch-installer {
     set iso_path="/archlinux-x86_64.iso"
     loopback loop (hd0,gpt7)$iso_path
     linux (loop)/arch/boot/x86_64/vmlinuz-linux img_dev=/dev/nvme0n1p7 img_loop=$iso_path
     initrd (loop)/arch/boot/x86_64/initramfs-linux.img
 }
-
 menuentry "Windows Installer" {
     insmod part_gpt
     insmod fat
     search --no-floppy --fs-uuid --set=root 02D4-2D14
     chainloader /efi/boot/bootx64.efi
 }
-
 EOF
-
 chmod +x "$CUSTOM_FILE"
 
-#################################################
-# GRUB CONFIG
-#################################################
-
 echo "=== Generating GRUB configuration ==="
-
 grub-mkconfig -o /boot/grub/grub.cfg
 
 #################################################
@@ -569,23 +453,14 @@ grub-mkconfig -o /boot/grub/grub.cfg
 #################################################
 
 echo "=== Configuring bash aliases ==="
-
 add_aliases() {
-
     local target_rc="$1"
-
     touch "$target_rc"
-
     if ! grep -q '# Methu Windows shortcuts' "$target_rc"; then
-
         cat >> "$target_rc" <<'EOF'
 
-#
-# ~/.bashrc
-#
-
 # If not running interactively, don't do anything
-[[ $- != *i* ]] && return
+[[ $- != i ]] && return
 
 if command -v fastfetch >/dev/null 2>&1; then
     fastfetch
@@ -596,36 +471,22 @@ alias grep='grep --color=auto'
 PS1='[\u@\h \W]\$ '
 
 # Methu Windows shortcuts
-alias bootwin='sudo grub-reboot "$(grep -i "menuentry.*Windows Boot Manager" /boot/grub/grub.cfg | sed -n '\''s/.*menuentry '\'''\''\([^'\'']*\).*/\1/p'\'' | head -n1)" && sudo reboot'
-
+alias bootwin='sudo grub-reboot "$(grep -i "menuentry.*Windows Boot Manager" /boot/grub/grub.cfg | sed -n "s/.*menuentry '\''\([^'\'']*\)'/'\''/\1/p" | head -n1)" && sudo reboot'
 alias cleaninstall='sudo grub-reboot arch-installer && reboot'
-
 alias mountwin='sudo mkdir -p /run/media/methu/Windows && sudo ntfs-3g /dev/nvme0n1p3 /run/media/methu/Windows'
-
 alias enable_warp-svc='sudo systemctl unmask warp-svc && sudo systemctl start warp-svc'
-
 alias disable_warp-svc='sudo systemctl stop warp-svc && sudo systemctl mask warp-svc'
-
 alias disablecores='for cpu in {4..7}; do echo 0 | sudo tee /sys/devices/system/cpu/cpu$cpu/online >/dev/null; done'
-
 alias enablecores='for cpu in {4..7}; do echo 1 | sudo tee /sys/devices/system/cpu/cpu$cpu/online >/dev/null; done'
-
 alias cpu-cool='sudo cpupower frequency-set -u 800MHz'
-
 alias cpu-normal='sudo cpupower frequency-set -u 1600MHz'
-
 alias fixefi='read -rp "Enter partition (e.g. nvme0n1p1 or /dev/nvme0n1p1): " dev && dev="/dev/${dev#/dev/}" && if [ -b "$dev" ]; then command -v fsck.fat >/dev/null 2>&1 || sudo pacman -S --needed dosfstools; sudo umount "$dev" 2>/dev/null; sudo fsck.fat -r -w "$dev" && sudo fsck.fat -v "$dev"; else echo "Error: Block device $dev not found."; fi'
 EOF
-
     fi
 }
 
-# Root bashrc
 add_aliases "/root/.bashrc"
-
-# User bashrc
 add_aliases "$USER_HOME/.bashrc"
-
 chown "$REAL_USER:$REAL_USER" "$USER_HOME/.bashrc"
 
 #################################################
@@ -633,20 +494,122 @@ chown "$REAL_USER:$REAL_USER" "$USER_HOME/.bashrc"
 #################################################
 
 echo "=== Configuring GNOME-friendly user directories ==="
+sudo -u "$REAL_USER" mkdir -p "$USER_HOME/.config" "$USER_HOME/.local/share"
 
-# Make sure standard XDG user directories exist.
-sudo -u "$REAL_USER" mkdir -p \
-    "$USER_HOME/.config" \
-    "$USER_HOME/.local/share"
+#################################################
+# APPLE SAN FRANCISCO FONTS SETUP
+#################################################
+echo "=== Installing Apple San Francisco Fonts ==="
+
+FONT_DIR="/usr/share/fonts/apple-fonts"
+mkdir -p "$FONT_DIR"
+
+echo "Cloning and installing SF Pro..."
+rm -rf /tmp/SF-Pro
+git clone --depth=1 https://github.com/sahibjotsaggu/San-Francisco-Pro-Fonts /tmp/SF-Pro
+cp -r /tmp/SF-Pro/*.otf /tmp/SF-Pro/*.ttf "$FONT_DIR/" 2>/dev/null || true
+rm -rf /tmp/SF-Pro
+
+echo "Cloning and installing SF Mono..."
+rm -rf /tmp/SF-Mono
+git clone --depth=1 https://github.com/shaunsingh/SFMono-Nerd-Font-Ligaturized /tmp/SF-Mono
+cp -r /tmp/SF-Mono/*.otf "$FONT_DIR/" 2>/dev/null || true
+rm -rf /tmp/SF-Mono
+
+chmod 644 "$FONT_DIR"/*
+fc-cache -f -v
+
+if [[ -d "$USER_RUNTIME" ]]; then
+    echo "Activating fonts and disabling animations for $REAL_USER..."
+    
+    sudo -u "$REAL_USER" \
+        XDG_RUNTIME_DIR="$USER_RUNTIME" \
+        DBUS_SESSION_BUS_ADDRESS="unix:path=$USER_RUNTIME/bus" \
+        gsettings set org.gnome.desktop.interface enable-animations false
+
+    sudo -u "$REAL_USER" \
+        XDG_RUNTIME_DIR="$USER_RUNTIME" \
+        DBUS_SESSION_BUS_ADDRESS="unix:path=$USER_RUNTIME/bus" \
+        gsettings set org.gnome.desktop.interface font-name 'SF Pro Display Regular 11'
+
+    sudo -u "$REAL_USER" \
+        XDG_RUNTIME_DIR="$USER_RUNTIME" \
+        DBUS_SESSION_BUS_ADDRESS="unix:path=$USER_RUNTIME/bus" \
+        gsettings set org.gnome.desktop.interface document-font-name 'SF Pro Text Regular 11'
+
+    sudo -u "$REAL_USER" \
+        XDG_RUNTIME_DIR="$USER_RUNTIME" \
+        DBUS_SESSION_BUS_ADDRESS="unix:path=$USER_RUNTIME/bus" \
+        gsettings set org.gnome.desktop.interface monospace-font-name 'SF Mono Regular 11'
+fi
+
+#################################################
+# MACTAHOE GTK THEME SETUP
+#################################################
+echo "=== Installing MacTahoe GTK Theme & Dependencies ==="
+
+pacman -S --needed --noconfirm \
+    sassc \
+    imagemagick \
+    dialog \
+    optipng \
+    inkscape
+
+echo "Cloning and installing MacTahoe-gtk-theme..."
+rm -rf /tmp/MacTahoe-gtk-theme
+git clone https://github.com/vinceliuice/MacTahoe-gtk-theme.git --depth=1 /tmp/MacTahoe-gtk-theme
+
+sudo -u "$REAL_USER" bash -c '
+    cd /tmp/MacTahoe-gtk-theme
+    ./install.sh -b -l
+'
+
+rm -rf /tmp/MacTahoe-gtk-theme
+
+#################################################
+# GNOME DEBLOAT
+#################################################
+
+echo "=== Removing unwanted GNOME applications ==="
+
+DEBLOAT_LIST=(
+    epiphany
+    gnome-weather
+    simple-scan
+    snapshot
+    loupe
+    papers
+    gnome-calculator
+    yelp
+    malcontent
+    orca
+    rygel
+    gnome-connections
+)
+
+TO_REMOVE=()
+for pkg in "${DEBLOAT_LIST[@]}"; do
+    if pacman -Qq "$pkg" >/dev/null 2>&1; then
+        TO_REMOVE+=("$pkg")
+    fi
+done
+
+if [ ${#TO_REMOVE[@]} -gt 0 ]; then
+    echo "Removing: ${TO_REMOVE[*]}"
+    pacman -Rsn --noconfirm "${TO_REMOVE[@]}"
+fi
+
+if [ -n "$(pacman -Qdtq)" ]; then
+    echo "Cleaning up orphaned dependencies..."
+    pacman -Rns --noconfirm $(pacman -Qdtq)
+fi
 
 #################################################
 # CLEANUP
 #################################################
 
 echo "=== Cleaning temporary files ==="
-
 pacman -Sc --noconfirm || true
-
 flatpak uninstall --unused -y || true
 
 #################################################
@@ -654,7 +617,6 @@ flatpak uninstall --unused -y || true
 #################################################
 
 echo "=== Final system update ==="
-
 pacman -Syu --noconfirm
 
 #################################################
@@ -662,44 +624,10 @@ pacman -Syu --noconfirm
 #################################################
 
 stty sane 2>/dev/null || true
-
 echo ""
 echo "====================================="
 echo "       METHU GNOME SETUP COMPLETE"
 echo "====================================="
-echo ""
-echo "Installed/configured:"
-echo ""
-echo "- MethuRepo"
-echo "- MethuRepo packages"
-echo "- yay"
-echo "- Brave"
-echo "- Spotify"
-echo "- SpotX"
-echo "- Cloudflare WARP"
-echo "- Preload"
-echo "- irqbalance"
-echo "- PipeWire"
-echo "- WirePlumber"
-echo "- Bluetooth"
-echo "- Pavucontrol"
-echo "- ZRAM 16GB (zstd)"
-echo "- RAM flush every 30 minutes"
-echo "- Intel media drivers"
-echo "- Stremio"
-echo "- VSCodium"
-echo "- GRUB"
-echo "- os-prober"
-echo "- Arch Installer GRUB entry"
-echo "- Windows Installer GRUB entry"
-echo "- Windows aliases"
-echo ""
-echo "KDE packages and theming have NOT been installed."
-echo ""
-echo "User: $REAL_USER"
-echo ""
-echo "AUR support enabled."
-echo "System updated."
 echo ""
 echo "A reboot is recommended."
 echo ""
