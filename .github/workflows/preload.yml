@@ -72,7 +72,7 @@ jobs:
 
           if [ "$FILE_SIZE" -gt "$MAX_SIZE" ]; then
             echo "Filen er større enn 2 GB. Splitter opp i deler..."
-            split -b 2G -d arch-offline-packages.img arch-offline-packages.img.
+            split -b 1800M -d arch-offline-packages.img arch-offline-packages.img.
             rm arch-offline-packages.img
           fi
 
