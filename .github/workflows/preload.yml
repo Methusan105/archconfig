@@ -1,9 +1,8 @@
 name: Preload Arch Linux Packages
 
 on:
-  workflow_dispatch: # Gjør det mulig å starte prosessen manuelt fra Actions-fanen
+  workflow_dispatch:
 
-# Denne seksjonen gir skriptet lov til å opprette en Release og laste opp ZIP-filen
 permissions:
   contents: write
 
@@ -25,7 +24,7 @@ jobs:
       - name: System oppdatering og installasjon av verktøy
         run: |
           pacman -Sy --noconfirm
-          pacman -S --noconfirm --needed pacman-contrib zip
+          pacman -S --noconfirm --needed pacman-contrib e2fsprogs coreutils util-linux
 
       - name: Opprett mapper
         run: |
@@ -35,6 +34,7 @@ jobs:
         run: |
           pacman -Sw --noconfirm --cachedir build/pkg \
           base base-devel linux-zen linux-firmware grub networkmanager \
+          mkinitcpio coreutils util-linux \
           gnome gdm bluez bluez-utils mesa intel-media-driver vulkan-intel \
           gnome-terminal nautilus zip unzip vlc vlc-plugins-all \
           mission-center transmission-gtk aria2 ntfs-3g fastfetch \
@@ -47,19 +47,41 @@ jobs:
           cd build/pkg
           repo-add ./custom.db.tar.zst *.pkg.tar.zst
 
-      - name: Inkluder json-konfigurasjon og pakk til ZIP
+      - name: Opprett dynamisk ext4 image og splitt om nødvendig
         run: |
-          if [ -f "user_configuration.json" ]; then
-            cp user_configuration.json build/
-          fi
-          cd build
-          zip -r ../arch-offline-packages.zip .
+          SIZE_MB=$(du -sm build/pkg | awk '{print $1}')
+          IMG_SIZE=$((SIZE_MB + 1024))
 
-      - name: Last opp ZIP-filen til GitHub Release
+          fallocate -l ${IMG_SIZE}M arch-offline-packages.img
+          mkfs.ext4 arch-offline-packages.img
+
+          mkdir -p mnt_img
+          mount arch-offline-packages.img mnt_img
+          mkdir -p mnt_img/repo
+          cp -r build/pkg mnt_img/repo/
+
+          if [ -f "user_configuration.json" ]; then
+            cp user_configuration.json mnt_img/repo/
+          fi
+
+          sync
+          umount mnt_img
+
+          FILE_SIZE=$(stat -c%s arch-offline-packages.img)
+          MAX_SIZE=2147483648
+
+          if [ "$FILE_SIZE" -gt "$MAX_SIZE" ]; then
+            echo "Filen er større enn 2 GB. Splitter opp i deler..."
+            split -b 2G -d arch-offline-packages.img arch-offline-packages.img.
+            rm arch-offline-packages.img
+          fi
+
+      - name: Last opp IMG-fil(er) til GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: arch-offline-packages.zip
-          tag_name: "latest" # Tvinger taggen til å hete 'latest' i stedet for refs/heads/main
+          files: |
+            arch-offline-packages.img*
+          tag_name: "latest"
           name: "Arch Offline Packages"
           draft: false
           prerelease: false
