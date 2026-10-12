@@ -18,10 +18,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Konfigurer Arch Linux Archive speil
+        run: |
+          echo 'Server = https://archive.archlinux.org/repos/2026/08/01/$repo/os/$arch' > /etc/pacman.d/mirrorlist
+
       - name: System oppdatering og installasjon av verktøy
         run: |
-          pacman -Syu --noconfirm
-          pacman -S --noconfirm pacman-contrib zip
+          pacman -Sy --noconfirm
+          pacman -S --noconfirm --needed pacman-contrib zip
 
       - name: Opprett mapper
         run: |
@@ -30,10 +34,13 @@ jobs:
       - name: Last ned alle pakker og avhengigheter
         run: |
           pacman -Sw --noconfirm --cachedir build/pkg \
-          base base-devel linux-zen linux-firmware grub networkmanager plasma-meta \
-          konsole dolphin zip unzip vlc vlc-plugins-all mission-center transmission-qt \
-          aria2 ntfs-3g fastfetch kwalletmanager falkon ffmpeg libnotify qt6-base \
-          qt6-multimedia sox kate cpupower hdparm qalculate-gtk zoxide filelight axel pacman-contrib
+          base base-devel linux-zen linux-firmware grub networkmanager \
+          gnome gdm bluez bluez-utils mesa intel-media-driver vulkan-intel \
+          gnome-terminal nautilus zip unzip vlc vlc-plugins-all \
+          mission-center transmission-gtk aria2 ntfs-3g fastfetch \
+          gnome-keyring epiphany ffmpeg libnotify glib2 sox \
+          gnome-text-editor cpupower hdparm qalculate-gtk zoxide \
+          baobab axel pacman-contrib
 
       - name: Generer lokal pakkedatabase
         run: |
