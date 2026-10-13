@@ -30,17 +30,19 @@ jobs:
         run: |
           mkdir -p build/pkg
 
-      - name: Last ned alle pakker og avhengigheter
+      - name: Last ned alle pakker og avhengigheter med full avhengighetssjekk
         run: |
-          pacman -Sw --noconfirm --cachedir build/pkg \
-          base base-devel linux-zen linux-firmware grub networkmanager \
-          mkinitcpio coreutils util-linux \
-          gnome gdm bluez bluez-utils mesa intel-media-driver vulkan-intel \
-          gnome-terminal nautilus zip unzip vlc vlc-plugins-all \
-          mission-center transmission-gtk aria2 ntfs-3g fastfetch \
-          gnome-keyring epiphany ffmpeg libnotify glib2 sox \
-          gnome-text-editor cpupower hdparm qalculate-gtk zoxide \
-          baobab axel pacman-contrib
+          mkdir -p build/pkg
+          pacman -Sy --noconfirm
+          # Vi bruker pacstrap i containeren for å hente absolutt alt for base + desktop
+          pacstrap -w build/pkg \
+            base base-devel linux-zen linux-firmware grub networkmanager \
+            mkinitcpio gnome gdm bluez bluez-utils mesa intel-media-driver vulkan-intel \
+            gnome-terminal nautilus zip unzip vlc vlc-plugins-all \
+            mission-center transmission-gtk aria2 ntfs-3g fastfetch \
+            gnome-keyring epiphany ffmpeg libnotify glib2 sox \
+            gnome-text-editor cpupower hdparm qalculate-gtk zoxide \
+            baobab axel pacman-contrib
 
       - name: Generer lokal pakkedatabase
         run: |
@@ -50,7 +52,7 @@ jobs:
       - name: Opprett dynamisk ext4 image og splitt om nødvendig
         run: |
           SIZE_MB=$(du -sm build/pkg | awk '{print $1}')
-          IMG_SIZE=$((SIZE_MB + 1024))
+          IMG_SIZE=$((SIZE_MB + 512))
 
           fallocate -l ${IMG_SIZE}M arch-offline-packages.img
           mkfs.ext4 arch-offline-packages.img
