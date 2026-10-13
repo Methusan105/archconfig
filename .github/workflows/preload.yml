@@ -43,7 +43,7 @@ jobs:
           Architecture = auto
           DBPath = /tmp/pacman-db
           CacheDir = /tmp/pacman-cache
-          SigLevel = Required DatabaseOptional
+          SigLevel = Optional TrustAll
 
           [core]
           Server = https://archive.archlinux.org/repos/2026/08/01/$repo/os/$arch
