@@ -71,7 +71,7 @@ jobs:
             transmission-gtk aria2 ntfs-3g fastfetch \
             gnome-keyring epiphany ffmpeg libnotify glib2 sox \
             gnome-text-editor cpupower hdparm qalculate-gtk \
-            zoxide baobab axel pacman-contrib
+            zoxide baobab axel pacman-contrib zram-generator
 
           # Kontroller at arkivet faktisk inneholder pakker
           echo "Antall nedlastede pakker:"
