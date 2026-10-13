@@ -1,0 +1,87 @@
+{
+    "app_config": {
+        "bluetooth_config": {
+            "enabled": true
+        }
+    },
+    "archinstall_language": "English",
+    "auth_config": {},
+    "bootloader_config": {
+        "bootloader": "Grub",
+        "removable": true,
+        "uki": false
+    },
+    "custom_commands": [],
+    "hostname": "archlinux",
+    "kernels": [
+        "linux-zen"
+    ],
+    "locale_config": {
+        "console_font": "default8x16",
+        "kb_layout": "no",
+        "sys_enc": "UTF-8",
+        "sys_lang": "nb_NO.UTF-8"
+    },
+    "mirror_config": {
+        "custom_repositories": [],
+        "custom_servers": [],
+        "mirror_regions": {},
+        "optional_repositories": []
+    },
+    "network_config": {
+        "type": "nm"
+    },
+    "ntp": true,
+    "packages": [
+        "gnome-terminal",
+        "nautilus",
+        "zip",
+        "unzip",
+        "vlc",
+        "vlc-plugins-all",
+        "mission-center",
+        "transmission-gtk",
+        "aria2",
+        "ntfs-3g",
+        "fastfetch",
+        "gnome-keyring",
+        "epiphany",
+        "ffmpeg",
+        "libnotify",
+        "glib2",
+        "sox",
+        "gnome-text-editor",
+        "cpupower",
+        "hdparm",
+        "qalculate-gtk",
+        "zoxide",
+        "baobab",
+        "axel",
+        "pacman-contrib"
+    ],
+    "pacman_config": {
+        "color": true,
+        "parallel_downloads": 5
+    },
+    "profile_config": {
+        "gfx_driver": "Intel (open-source)",
+        "greeter": "gdm",
+        "profile": {
+            "custom_settings": {
+                "GNOME": {}
+            },
+            "details": [
+                "GNOME"
+            ],
+            "main": "Desktop"
+        }
+    },
+    "script": null,
+    "services": [],
+    "swap": {
+        "algorithm": "zstd",
+        "enabled": true
+    },
+    "timezone": "Europe/Oslo",
+    "version": "4.4"
+}
