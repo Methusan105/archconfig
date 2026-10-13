@@ -24,7 +24,7 @@ jobs:
       - name: System oppdatering og installasjon av verktøy
         run: |
           pacman -Sy --noconfirm
-          pacman -S --noconfirm --needed pacman-contrib e2fsprogs coreutils util-linux
+          pacman -S --noconfirm --needed pacman-contrib e2fsprogs coreutils util-linux arch-install-scripts
 
       - name: Opprett mapper
         run: |
