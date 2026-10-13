@@ -30,21 +30,55 @@ jobs:
         run: |
           mkdir -p build/pkg
 
-
-      - name: Last ned alle pakker med transitive avhengigheter
+      - name: Last ned alle pakker og avhengigheter
+        shell: bash
         run: |
-          mkdir -p build/pkg
-          mkdir -p /tmp/pacman-root/var/lib/pacman
+          set -euo pipefail
 
-          pacman --config <(echo -e "[options]\nRootDir = /tmp/pacman-root\nDBPath = /tmp/pacman-root/var/lib/pacman\nCacheDir = $PWD/build/pkg\nSigLevel = Required DatabaseOptional") \
-            --noconfirm --cachedir "$PWD/build/pkg" -Sw \
-            base base-devel linux-zen linux-firmware grub networkmanager \
-            mkinitcpio gnome gdm bluez bluez-utils mesa intel-media-driver vulkan-intel \
-            gnome-terminal nautilus zip unzip vlc vlc-plugins-all \
-            mission-center transmission-gtk aria2 ntfs-3g fastfetch \
+          mkdir -p build/pkg
+          mkdir -p /tmp/pacman-db/sync
+
+          cat > /tmp/pacman-offline.conf <<'EOF'
+          [options]
+          Architecture = auto
+          DBPath = /tmp/pacman-db
+          CacheDir = /tmp/pacman-cache
+          SigLevel = Required DatabaseOptional
+
+          [core]
+          Server = https://archive.archlinux.org/repos/2026/08/01/$repo/os/$arch
+
+          [extra]
+          Server = https://archive.archlinux.org/repos/2026/08/01/$repo/os/$arch
+          EOF
+
+          mkdir -p /tmp/pacman-cache
+
+          # Synkroniser pakkedatabasene uten å installere pakker
+          pacman --config /tmp/pacman-offline.conf -Syy --noconfirm
+
+          # Last ned pakkene og avhengighetene uten å installere dem
+          pacman --config /tmp/pacman-offline.conf \
+            --cachedir "$PWD/build/pkg" \
+            --noconfirm \
+            -Sw \
+            base base-devel sudo \
+            linux-zen linux-firmware grub networkmanager \
+            mkinitcpio gnome gdm bluez bluez-utils \
+            mesa intel-media-driver vulkan-intel \
+            gnome-terminal nautilus zip unzip \
+            vlc vlc-plugins-all mission-center \
+            transmission-gtk aria2 ntfs-3g fastfetch \
             gnome-keyring epiphany ffmpeg libnotify glib2 sox \
-            gnome-text-editor cpupower hdparm qalculate-gtk zoxide \
-            baobab axel pacman-contrib
+            gnome-text-editor cpupower hdparm qalculate-gtk \
+            zoxide baobab axel pacman-contrib
+
+          # Kontroller at arkivet faktisk inneholder pakker
+          echo "Antall nedlastede pakker:"
+          find build/pkg -maxdepth 1 -type f -name '*.pkg.tar.*' | wc -l
+
+          # Avbryt hvis ingen pakker ble lastet ned
+          test -n "$(find build/pkg -maxdepth 1 -type f -name '*.pkg.tar.*' -print -quit)"
 
       - name: Generer lokal pakkedatabase
         run: |
