@@ -30,16 +30,13 @@ jobs:
         run: |
           mkdir -p build/pkg
 
+
       - name: Last ned alle pakker med transitive avhengigheter
         run: |
           mkdir -p build/pkg
-          pacman -Sy --noconfirm
-          
-          # Vi oppretter en midlertidig dbpath for å la pacman løse alle avhengigheter automatisk
-          mkdir -p /tmp/pacman-root/var/db/pacman
-          mkdir -p /tmp/pacman-root/var/cache/pacman/pkg
-          
-          pacman -Sy --config <(echo -e "[options]\nRootDir = /tmp/pacman-root\nDBPath = /tmp/pacman-root/var/lib/pacman\nCacheDir = $PWD/build/pkg\nSigLevel = Required DatabaseOptional") \
+          mkdir -p /tmp/pacman-root/var/lib/pacman
+
+          pacman --config <(echo -e "[options]\nRootDir = /tmp/pacman-root\nDBPath = /tmp/pacman-root/var/lib/pacman\nCacheDir = $PWD/build/pkg\nSigLevel = Required DatabaseOptional") \
             --noconfirm --cachedir "$PWD/build/pkg" -Sw \
             base base-devel linux-zen linux-firmware grub networkmanager \
             mkinitcpio gnome gdm bluez bluez-utils mesa intel-media-driver vulkan-intel \
