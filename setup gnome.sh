@@ -176,8 +176,7 @@ sudo -u "$REAL_USER" yay -S --needed --noconfirm \
     brave-origin-bin \
     warp-cli \
     galaxybudsclient-bin \
-    preload \
-    spotify
+    preload
 
 #################################################
 # PRELOAD
@@ -196,16 +195,6 @@ echo "=== Installing and enabling irqbalance ==="
 pacman -S --needed --noconfirm irqbalance
 
 systemctl enable --now irqbalance.service
-
-#################################################
-# SPOTX
-#################################################
-
-echo "=== Installing SpotX ==="
-
-sudo -u "$REAL_USER" bash -c \
-    'bash <(curl -sSL https://spotx-official.github.io/run.sh)' \
-    || echo "WARNING: SpotX failed - run it manually later."
 
 #################################################
 # FLATHUB
@@ -493,41 +482,47 @@ chmod 755 /usr/local/bin/bootwin
 # BASHRC ALIASES
 #################################################
 
-echo "=== Configuring bash aliases ==="
-add_aliases() {
-    local target_rc="$1"
+echo "=== Configuring fish aliases ==="
+function add_aliases
+    set -l target_rc "$argv[1]"
+    
+    # Ensure the target file's parent directory exists and touch the file
+    mkdir -p (dirname "$target_rc")
     touch "$target_rc"
-    if ! grep -q '# Methu Windows shortcuts' "$target_rc"; then
+    
+    if not grep -q '# Methu Windows shortcuts' "$target_rc"
         cat >> "$target_rc" <<'EOF'
 
 # If not running interactively, don't do anything
-[[ $- != *i* ]] && return
+if not status is-interactive
+    exit
+end
 
-if command -v fastfetch >/dev/null 2>&1; then
+if command -q fastfetch
     fastfetch
-fi
+end
 
 alias ls='ls --color=auto'
 alias grep='grep --color=auto'
-PS1='[\u@\h \W]\$ '
+# Fish has a built-in prompt or custom fish_prompt, but setting standard color variables or leaving default prompt is common.
 
 # Methu Windows shortcuts
 alias cleaninstall='sudo grub-reboot arch-installer && sudo reboot'
 alias mountwin='sudo mkdir -p /run/media/$USER/Windows && sudo ntfs-3g /dev/nvme0n1p3 /run/media/$USER/Windows'
 alias enable_warp-svc='sudo systemctl unmask warp-svc && sudo systemctl start warp-svc'
 alias disable_warp-svc='sudo systemctl stop warp-svc && sudo systemctl mask warp-svc'
-alias disablecores='for cpu in {4..7}; do echo 0 | sudo tee /sys/devices/system/cpu/cpu$cpu/online >/dev/null; done'
-alias enablecores='for cpu in {4..7}; do echo 1 | sudo tee /sys/devices/system/cpu/cpu$cpu/online >/dev/null; done'
+alias disablecores='for cpu in (seq 4 7); echo 0 | sudo tee /sys/devices/system/cpu/cpu$cpu/online >/dev/null; end'
+alias enablecores='for cpu in (seq 4 7); echo 1 | sudo tee /sys/devices/system/cpu/cpu$cpu/online >/dev/null; end'
 alias cpu-cool='sudo cpupower frequency-set -u 800MHz'
 alias cpu-normal='sudo cpupower frequency-set -u 1600MHz'
-alias fixefi='read -rp "Enter partition (e.g. nvme0n1p1 or /dev/nvme0n1p1): " dev && dev="/dev/${dev#/dev/}" && if [ -b "$dev" ]; then command -v fsck.fat >/dev/null 2>&1 || sudo pacman -S --needed dosfstools; sudo umount "$dev" 2>/dev/null; sudo fsck.fat -r -w "$dev" && sudo fsck.fat -v "$dev"; else echo "Error: Block device $dev not found."; fi'
+alias fixefi='read -l -p "echo -n \"Enter partition (e.g. nvme0n1p1 or /dev/nvme0n1p1): \"" dev; set dev "/dev/"(string replace -r "^/dev/" "" $dev); if test -b "$dev"; command -v fsck.fat >/dev/null 2>&1 || sudo pacman -S --needed dosfstools; sudo umount "$dev" 2>/dev/null; sudo fsck.fat -r -w "$dev" && sudo fsck.fat -v "$dev"; else; echo "Error: Block device $dev not found."; end'
 EOF
-    fi
-}
+    end
+end
 
-add_aliases "/root/.bashrc"
-add_aliases "$USER_HOME/.bashrc"
-chown "$REAL_USER:" "$USER_HOME/.bashrc"
+add_aliases "/root/.config/fish/config.fish"
+add_aliases "$USER_HOME/.config/fish/config.fish"
+chown -R "$REAL_USER:" "$USER_HOME/.config/fish"
 
 #################################################
 # GNOME / USER DIRECTORIES
