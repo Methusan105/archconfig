@@ -453,33 +453,7 @@ echo "=== Generating GRUB configuration ==="
 grub-mkconfig -o /boot/grub/grub.cfg
 
 #################################################
-# BOOTWIN HELPER
-#################################################
-
-echo "=== Installing bootwin helper ==="
-
-cat > /usr/local/bin/bootwin <<'EOF'
-#!/usr/bin/env bash
-# Reboot once into Windows Boot Manager via GRUB
-set -euo pipefail
-
-[[ $EUID -eq 0 ]] || exec sudo "$0" "$@"
-
-entry="$(sed -n "s/^[[:space:]]*menuentry '\([^']*Windows Boot Manager[^']*\)'.*/\1/Ip" /boot/grub/grub.cfg | head -n1)"
-
-if [[ -z "$entry" ]]; then
-    echo "ERROR: Windows Boot Manager entry not found in /boot/grub/grub.cfg" >&2
-    echo "Run: sudo grub-mkconfig -o /boot/grub/grub.cfg" >&2
-    exit 1
-fi
-
-grub-reboot "$entry"
-reboot
-EOF
-chmod 755 /usr/local/bin/bootwin
-
-#################################################
-# BASHRC ALIASES
+# FISH ALIASES
 #################################################
 
 echo "=== Configuring fish aliases ==="
@@ -493,29 +467,60 @@ function add_aliases
     if not grep -q '# Methu Windows shortcuts' "$target_rc"
         cat >> "$target_rc" <<'EOF'
 
-# If not running interactively, don't do anything
-if not status is-interactive
-    exit
+#
+# ~/.config/fish/config.fish
+# # Methu Windows shortcuts
+
+# Standard Aliases (Fish built-in alias wrapper)
+alias ls 'ls --color=auto'
+alias grep 'grep --color=auto'
+
+# Simple Shortcuts / Functions
+alias cleaninstall 'sudo grub-reboot arch-installer && reboot'
+alias mountwin 'sudo mkdir -p /run/media/methu/Windows && sudo ntfs-3g /dev/nvme0n1p3 /run/media/methu/Windows'
+alias enable_warp-svc 'sudo systemctl unmask warp-svc && sudo systemctl start warp-svc'
+alias disable_warp-svc 'sudo systemctl stop warp-svc && sudo systemctl mask warp-svc'
+alias cpu-cool 'sudo cpupower frequency-set -u 800MHz'
+alias cpu-normal 'sudo cpupower frequency-set -u 1600MHz'
+
+# Complex Functions
+function bootwin
+    sudo grub-reboot (grep -i "menuentry.*Windows Boot Manager" /boot/grub/grub.cfg | sed -n 's/.*menuentry '\''\([^\']*\).*/\1/p' | head -n1)
+    sudo reboot
 end
 
-if command -q fastfetch
-    fastfetch
+function disablecores
+    for cpu in (seq 4 7)
+        echo 0 | sudo tee /sys/devices/system/cpu/cpu$cpu/online >/dev/null
+    end
 end
 
-alias ls='ls --color=auto'
-alias grep='grep --color=auto'
-# Fish has a built-in prompt or custom fish_prompt, but setting standard color variables or leaving default prompt is common.
+function enablecores
+    for cpu in (seq 4 7)
+        echo 1 | sudo tee /sys/devices/system/cpu/cpu$cpu/online >/dev/null
+    end
+end
 
-# Methu Windows shortcuts
-alias cleaninstall='sudo grub-reboot arch-installer && sudo reboot'
-alias mountwin='sudo mkdir -p /run/media/$USER/Windows && sudo ntfs-3g /dev/nvme0n1p3 /run/media/$USER/Windows'
-alias enable_warp-svc='sudo systemctl unmask warp-svc && sudo systemctl start warp-svc'
-alias disable_warp-svc='sudo systemctl stop warp-svc && sudo systemctl mask warp-svc'
-alias disablecores='for cpu in (seq 4 7); echo 0 | sudo tee /sys/devices/system/cpu/cpu$cpu/online >/dev/null; end'
-alias enablecores='for cpu in (seq 4 7); echo 1 | sudo tee /sys/devices/system/cpu/cpu$cpu/online >/dev/null; end'
-alias cpu-cool='sudo cpupower frequency-set -u 800MHz'
-alias cpu-normal='sudo cpupower frequency-set -u 1600MHz'
-alias fixefi='read -l -p "echo -n \"Enter partition (e.g. nvme0n1p1 or /dev/nvme0n1p1): \"" dev; set dev "/dev/"(string replace -r "^/dev/" "" $dev); if test -b "$dev"; command -v fsck.fat >/dev/null 2>&1 || sudo pacman -S --needed dosfstools; sudo umount "$dev" 2>/dev/null; sudo fsck.fat -r -w "$dev" && sudo fsck.fat -v "$dev"; else; echo "Error: Block device $dev not found."; end'
+function fixefi
+    read -l -p "echo -n 'Enter partition (e.g. nvme0n1p1 or /dev/nvme0n1p1): '" dev
+    set dev "/dev/"(string replace -r '^/dev/' '' $dev)
+    if test -b $dev
+        if not command -v fsck.fat >/dev/null
+            sudo pacman -S --needed dosfstools
+        end
+        sudo umount $dev 2>/dev/null
+        sudo fsck.fat -r -w $dev && sudo fsck.fat -v $dev
+    else
+        echo "Error: Block device $dev not found."
+    end
+end
+
+# Interactive-only configurations (like fastfetch)
+if status is-interactive
+    if command -v fastfetch >/dev/null
+        fastfetch
+    end
+end
 EOF
     end
 end
