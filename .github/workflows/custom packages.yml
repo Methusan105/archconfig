@@ -34,21 +34,21 @@ jobs:
 
       - name: Clone and Build Package
         run: |
-          su builder -c "
+          su builder -s /bin/bash << 'EOF'
             cd /tmp || true
             git clone https://aur.archlinux.org/${{ github.event.inputs.package_name }}.git || true
             cd ${{ github.event.inputs.package_name }} || true
 
             # Spotify GPG key import
-            if [ \"${{ github.event.inputs.package_name }}\" = \"spotify\" ]; then
+            if [ "${{ github.event.inputs.package_name }}" = "spotify" ]; then
               echo 'Importing Spotify OpenPGP key...'
               curl -sS https://download.spotify.com/debian/pubkey_5384CE82BA52C83A.gpg | gpg --import -
             fi
 
             # Overwrite PKGBUILD using cat for ryujinx-canary
-            if [ \"${{ github.event.inputs.package_name }}\" = \"ryujinx-canary\" ]; then
+            if [ "${{ github.event.inputs.package_name }}" = "ryujinx-canary" ]; then
               echo 'Writing fixed PKGBUILD for ryujinx-canary...'
-              cat << 'EOF' > PKGBUILD
+              cat << 'PKGBUILD_EOF' > PKGBUILD
               # Maintainer:
               
               ## options
@@ -187,18 +187,18 @@ jobs:
               
               _update_version
               _source_ryujinx
-              EOF
+              PKGBUILD_EOF
                           fi
               
                           # Update pkgver and skip checksum check for freesmlauncher
-                          if [ \"${{ github.event.inputs.package_name }}\" = \"freesmlauncher\" ]; then
+                          if [ "${{ github.event.inputs.package_name }}" = "freesmlauncher" ]; then
                             echo 'Updating pkgver to 2.3.1 for freesmlauncher...'
                             sed -i 's/^pkgver=2\.3\.0$/pkgver=2.3.1/' PKGBUILD || true
-                            sed -i \"s/^sha256sums=(.*/sha256sums=('SKIP')/\" PKGBUILD || true
+                            sed -i "s/^sha256sums=(.*/sha256sums=('SKIP')/" PKGBUILD || true
                           fi
                           
                           # Fix PKGBUILD and build environment for OpenNOW 1.0.1
-                          if [ \"${{ github.event.inputs.package_name }}\" = \"opennow\" ]; then
+                          if [ "${{ github.event.inputs.package_name }}" = "opennow" ]; then
                             echo 'Updating pkgver and build flags for OpenNOW 1.0.1...'
                             
                             # 1. Update pkgver and _pkgver to 1.0.1
@@ -215,13 +215,13 @@ jobs:
                             # 4. Export compiler flags for Rust ring-core assembly compilation
                             export CC=clang
                             export CXX=clang++
-                            export CFLAGS=\"\"
-                            export LDFLAGS=\"\"
+                            export CFLAGS=""
+                            export LDFLAGS=""
                           fi
               
                           # Build package
                           makepkg -s --noconfirm || true
-          "
+                        EOF
 
       - name: Upload Package to GitHub Release
         env:
