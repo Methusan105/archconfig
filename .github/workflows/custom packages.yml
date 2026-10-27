@@ -49,178 +49,178 @@ jobs:
             if [ \"${{ github.event.inputs.package_name }}\" = \"ryujinx-canary\" ]; then
               echo 'Writing fixed PKGBUILD for ryujinx-canary...'
               cat << 'EOF' > PKGBUILD
-# Maintainer:
-
-## options
-if [[ (-z "$_srcinfo" && -z "$_pkgver") ]]; then
-  : ${_autoupdate:=true}
-fi
-
-: ${_install_path:=usr/lib}
-
-: ${DOTNET_SYSTEM_NET_DISABLEIPV6=1}
-export DOTNET_SYSTEM_NET_DISABLEIPV6
-
-_pkgname="ryujinx"
-pkgname="$_pkgname-canary"
-pkgver=1.3.308
-pkgrel=1
-pkgdesc="Experimental Nintendo Switch Emulator written in C#"
-url="https://starforgejo.dev/archive/Ryubing"
-license=('MIT')
-arch=('x86_64')
-
-provides=("$_pkgname")
-conflicts=("$_pkgname")
-
-depends=(
-  'alsa-lib'
-  'fontconfig'
-  'hicolor-icon-theme'
-  'jack'
-  'libpulse'
-  'libx11'
-  'wayland'
-)
-makedepends=(
-  "dotnet-sdk${_dotnet_type:-}"
-  'desktop-file-utils'
-)
-
-options=('!strip' '!debug')
-
-_source_ryujinx() {
-  url="https://github.com/Methusan105/archconfig/releases/download"
-  _pkgsrc="ryubing"
-  _pkgext="tar.gz"
-  source=("${_pkgname}-canary-$_pkgver.$_pkgext"::"$url/ob/Canary-$_pkgver.$_pkgext")
-  sha256sums=('SKIP')
-}
-
-prepare() {
-  cp "$_pkgsrc"/global.json global.json 2>/dev/null || true
-  rm -f global.json "$_pkgsrc"/global.json
-}
-
-pkgver() {
-  echo "${_pkgver:?}"
-}
-
-build() (
-  export DOTNET_CLI_HOME="$SRCDEST/nuget-home"
-  export DOTNET_CLI_TELEMETRY_OPTOUT=1
-
-  local _runtime="linux-x64"
-  local _args=(
-    -c Release
-    -r "$_runtime"
-    --disable-build-servers
-    --nologo
-    --self-contained true
-    -p:DebugType=none
-    -p:ExtraDefineConstants=DISABLE_UPDATER
-    -p:PublishSingleFile=true
-    -p:Version="$pkgver"
-    -p:RuntimeIdentifiers="$_runtime"
-  )
-
-  echo "Building AVA Interface..."
-  dotnet publish "${_args[@]}" -o publish_ava "$_pkgsrc/src/Ryujinx"
-
-  echo "Shutting down dotnet build server in background."
-  (timeout -k 45 30 dotnet build-server shutdown) > /dev/null 2>&1 &
-)
-
-package() {
-  # program
-  mkdir -pm755 "$pkgdir/$_install_path/$_pkgname"
-  cp -a publish_ava/* "$pkgdir/$_install_path/$_pkgname/"
-
-  # symlink
-  mkdir -pm755 "$pkgdir/usr/bin"
-  ln -s "/$_install_path/ryujinx/Ryujinx" "$pkgdir/usr/bin/$_pkgname"
-
-  # launcher
-  local _launcher="$pkgdir/usr/share/applications/$_pkgname.desktop"
-  install -Dm644 "$_pkgsrc"/distribution/linux/app.ryujinx.Ryujinx.desktop "$_launcher"
-
-  desktop-file-edit --remove-key="Version" "$_launcher"
-  desktop-file-edit --set-key="Exec" --set-value="$_pkgname %f" "$_launcher"
-  desktop-file-edit --set-icon="$_pkgname" "$_launcher"
-
-  # icon
-  install -Dm644 "$_pkgsrc"/distribution/misc/Logo.png "$pkgdir/usr/share/icons/hicolor/256x256/apps/$_pkgname.png"
-
-  # mimetype
-  install -Dm644 "$_pkgsrc"/distribution/linux/mime/Ryujinx.xml "$pkgdir/usr/share/mime/packages/$_pkgname.xml"
-
-  # license
-  install -Dm644 "$_pkgsrc"/LICENSE.txt "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
-
-  # permissions
-  find "$pkgdir" -type d -exec chmod 755 {} \;
-  find "$pkgdir" -type f -exec chmod 644 {} \;
-  chmod 755 "$pkgdir/$_install_path/$_pkgname/Ryujinx"
-  chmod 755 "$pkgdir/$_install_path/$_pkgname/Ryujinx.sh"
-}
-
-_update_version() {
-  : ${_pkgver:=$pkgver}
-
-  if [[ "${_autoupdate::1}" != "t" ]]; then
-    return
-  fi
-
-  local _response _pkgver_new
-  _response=$(curl -Ssf -L --max-redirs 3 "$url/tags.atom")
-  _tag=$(
-    printf '%s' "$_response" \
-      | grep -Po '/tag/\KCanary-([0-9\.]+)' \
-      | sort -rV | head -1
-  )
-  _pkgver_new="${_tag#Canary-}"
-
-  if [ "$_pkgver" != "${_pkgver_new:?}" ]; then
-    _pkgver="${_pkgver_new:?}"
-  fi
-}
-
-_update_version
-_source_ryujinx
-EOF
-            fi
-
-            # Update pkgver and skip checksum check for freesmlauncher
-            if [ \"${{ github.event.inputs.package_name }}\" = \"freesmlauncher\" ]; then
-              echo 'Updating pkgver to 2.3.1 for freesmlauncher...'
-              sed -i 's/^pkgver=2\.3\.0$/pkgver=2.3.1/' PKGBUILD || true
-              sed -i \"s/^sha256sums=(.*/sha256sums=('SKIP')/\" PKGBUILD || true
-            fi
-            
-            # Fix PKGBUILD and build environment for OpenNOW 1.0.1
-            if [ \"${{ github.event.inputs.package_name }}\" = \"opennow\" ]; then
-              echo 'Updating pkgver and build flags for OpenNOW 1.0.1...'
+              # Maintainer:
               
-              # 1. Update pkgver and _pkgver to 1.0.1
-              sed -i 's/^pkgver=.*/pkgver=1.0.1/' PKGBUILD || true
-              sed -i 's/^_pkgver=.*/_pkgver=1.0.1/' PKGBUILD || true
+              ## options
+              if [[ (-z "$_srcinfo" && -z "$_pkgver") ]]; then
+                : ${_autoupdate:=true}
+              fi
               
-              # 2. Safely override sha256sums array
-              sed -i '/^sha256sums=(/,/)/c\sha256sums=(\x27SKIP\x27 \x27SKIP\x27 \x27SKIP\x27)' PKGBUILD || true
-
-              # 3. Remove non-existent opennow-stable path operations
-              sed -i '/cd opennow-stable/d' PKGBUILD || true
-              sed -i 's/opennow-stable\///g' PKGBUILD || true
-
-              # 4. Export compiler flags for Rust ring-core assembly compilation
-              export CC=clang
-              export CXX=clang++
-              export CFLAGS=\"\"
-              export LDFLAGS=\"\"
-            fi
-
-            # Build package
-            makepkg -s --noconfirm || true
+              : ${_install_path:=usr/lib}
+              
+              : ${DOTNET_SYSTEM_NET_DISABLEIPV6=1}
+              export DOTNET_SYSTEM_NET_DISABLEIPV6
+              
+              _pkgname="ryujinx"
+              pkgname="$_pkgname-canary"
+              pkgver=1.3.308
+              pkgrel=1
+              pkgdesc="Experimental Nintendo Switch Emulator written in C#"
+              url="https://starforgejo.dev/archive/Ryubing"
+              license=('MIT')
+              arch=('x86_64')
+              
+              provides=("$_pkgname")
+              conflicts=("$_pkgname")
+              
+              depends=(
+                'alsa-lib'
+                'fontconfig'
+                'hicolor-icon-theme'
+                'jack'
+                'libpulse'
+                'libx11'
+                'wayland'
+              )
+              makedepends=(
+                "dotnet-sdk${_dotnet_type:-}"
+                'desktop-file-utils'
+              )
+              
+              options=('!strip' '!debug')
+              
+              _source_ryujinx() {
+                url="https://github.com/Methusan105/archconfig/releases/download"
+                _pkgsrc="ryubing"
+                _pkgext="tar.gz"
+                source=("${_pkgname}-canary-$_pkgver.$_pkgext"::"$url/ob/Canary-$_pkgver.$_pkgext")
+                sha256sums=('SKIP')
+              }
+              
+              prepare() {
+                cp "$_pkgsrc"/global.json global.json 2>/dev/null || true
+                rm -f global.json "$_pkgsrc"/global.json
+              }
+              
+              pkgver() {
+                echo "${_pkgver:?}"
+              }
+              
+              build() (
+                export DOTNET_CLI_HOME="$SRCDEST/nuget-home"
+                export DOTNET_CLI_TELEMETRY_OPTOUT=1
+              
+                local _runtime="linux-x64"
+                local _args=(
+                  -c Release
+                  -r "$_runtime"
+                  --disable-build-servers
+                  --nologo
+                  --self-contained true
+                  -p:DebugType=none
+                  -p:ExtraDefineConstants=DISABLE_UPDATER
+                  -p:PublishSingleFile=true
+                  -p:Version="$pkgver"
+                  -p:RuntimeIdentifiers="$_runtime"
+                )
+              
+                echo "Building AVA Interface..."
+                dotnet publish "${_args[@]}" -o publish_ava "$_pkgsrc/src/Ryujinx"
+              
+                echo "Shutting down dotnet build server in background."
+                (timeout -k 45 30 dotnet build-server shutdown) > /dev/null 2>&1 &
+              )
+              
+              package() {
+                # program
+                mkdir -pm755 "$pkgdir/$_install_path/$_pkgname"
+                cp -a publish_ava/* "$pkgdir/$_install_path/$_pkgname/"
+              
+                # symlink
+                mkdir -pm755 "$pkgdir/usr/bin"
+                ln -s "/$_install_path/ryujinx/Ryujinx" "$pkgdir/usr/bin/$_pkgname"
+              
+                # launcher
+                local _launcher="$pkgdir/usr/share/applications/$_pkgname.desktop"
+                install -Dm644 "$_pkgsrc"/distribution/linux/app.ryujinx.Ryujinx.desktop "$_launcher"
+              
+                desktop-file-edit --remove-key="Version" "$_launcher"
+                desktop-file-edit --set-key="Exec" --set-value="$_pkgname %f" "$_launcher"
+                desktop-file-edit --set-icon="$_pkgname" "$_launcher"
+              
+                # icon
+                install -Dm644 "$_pkgsrc"/distribution/misc/Logo.png "$pkgdir/usr/share/icons/hicolor/256x256/apps/$_pkgname.png"
+              
+                # mimetype
+                install -Dm644 "$_pkgsrc"/distribution/linux/mime/Ryujinx.xml "$pkgdir/usr/share/mime/packages/$_pkgname.xml"
+              
+                # license
+                install -Dm644 "$_pkgsrc"/LICENSE.txt "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+              
+                # permissions
+                find "$pkgdir" -type d -exec chmod 755 {} \;
+                find "$pkgdir" -type f -exec chmod 644 {} \;
+                chmod 755 "$pkgdir/$_install_path/$_pkgname/Ryujinx"
+                chmod 755 "$pkgdir/$_install_path/$_pkgname/Ryujinx.sh"
+              }
+              
+              _update_version() {
+                : ${_pkgver:=$pkgver}
+              
+                if [[ "${_autoupdate::1}" != "t" ]]; then
+                  return
+                fi
+              
+                local _response _pkgver_new
+                _response=$(curl -Ssf -L --max-redirs 3 "$url/tags.atom")
+                _tag=$(
+                  printf '%s' "$_response" \
+                    | grep -Po '/tag/\KCanary-([0-9\.]+)' \
+                    | sort -rV | head -1
+                )
+                _pkgver_new="${_tag#Canary-}"
+              
+                if [ "$_pkgver" != "${_pkgver_new:?}" ]; then
+                  _pkgver="${_pkgver_new:?}"
+                fi
+              }
+              
+              _update_version
+              _source_ryujinx
+              EOF
+                          fi
+              
+                          # Update pkgver and skip checksum check for freesmlauncher
+                          if [ \"${{ github.event.inputs.package_name }}\" = \"freesmlauncher\" ]; then
+                            echo 'Updating pkgver to 2.3.1 for freesmlauncher...'
+                            sed -i 's/^pkgver=2\.3\.0$/pkgver=2.3.1/' PKGBUILD || true
+                            sed -i \"s/^sha256sums=(.*/sha256sums=('SKIP')/\" PKGBUILD || true
+                          fi
+                          
+                          # Fix PKGBUILD and build environment for OpenNOW 1.0.1
+                          if [ \"${{ github.event.inputs.package_name }}\" = \"opennow\" ]; then
+                            echo 'Updating pkgver and build flags for OpenNOW 1.0.1...'
+                            
+                            # 1. Update pkgver and _pkgver to 1.0.1
+                            sed -i 's/^pkgver=.*/pkgver=1.0.1/' PKGBUILD || true
+                            sed -i 's/^_pkgver=.*/_pkgver=1.0.1/' PKGBUILD || true
+                            
+                            # 2. Safely override sha256sums array
+                            sed -i '/^sha256sums=(/,/)/c\sha256sums=(\x27SKIP\x27 \x27SKIP\x27 \x27SKIP\x27)' PKGBUILD || true
+              
+                            # 3. Remove non-existent opennow-stable path operations
+                            sed -i '/cd opennow-stable/d' PKGBUILD || true
+                            sed -i 's/opennow-stable\///g' PKGBUILD || true
+              
+                            # 4. Export compiler flags for Rust ring-core assembly compilation
+                            export CC=clang
+                            export CXX=clang++
+                            export CFLAGS=\"\"
+                            export LDFLAGS=\"\"
+                          fi
+              
+                          # Build package
+                          makepkg -s --noconfirm || true
           "
 
       - name: Upload Package to GitHub Release
