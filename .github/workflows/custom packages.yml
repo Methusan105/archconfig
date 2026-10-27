@@ -21,7 +21,7 @@ jobs:
       - name: Update System and Install Base Dependencies
         run: |
           pacman -Syu --noconfirm --needed git sudo github-cli gnupg curl cmake \
-            clang llvm \
+            clang llvm python \
             qt6-base qt6-declarative qt6-5compat qt6-multimedia qt6-svg \
             qt6-wayland qt6-tools qt6-websockets qt6-shadertools \
             vulkan-headers vulkan-icd-loader wayland wayland-protocols \
@@ -45,11 +45,31 @@ jobs:
               curl -sS https://download.spotify.com/debian/pubkey_5384CE82BA52C83A.gpg | gpg --import -
             fi
 
-            # Fix URL and prepare() for ryujinx-canary
+            # Update URL and add _source_ryujinx for ryujinx-canary
             if [ \"${{ github.event.inputs.package_name }}\" = \"ryujinx-canary\" ]; then
-              echo 'Updating source URL and overriding prepare() in PKGBUILD for ryujinx-canary...'
-              sed -i 's#url=.*#url=\"https://starforgejo.dev/archive/Ryubing\"#' PKGBUILD || true
-              sed -i '/prepare() {/,/}/c\prepare() {\n  cp \"\$_pkgsrc\"/global.json global.json 2>/dev/null || true\n  rm -f global.json \"\$_pkgsrc\"/global.json\n}' PKGBUILD || true
+              echo 'Updating PKGBUILD for ryujinx-canary...'
+              python3 -c '
+              import re
+              with open("PKGBUILD", "r") as f:
+                  content = f.read()
+
+              # Replace url
+              content = re.sub(r\"^url=.*$\", \"url=\\\"https://github.com/Methusan105/archconfig/releases/download\\\"\", content, flags=re.M)
+
+              # Append _source_ryujinx definition
+              custom_func = \"\"\"
+              _source_ryujinx() {
+                _pkgsrc=\"ryubing\"
+                _pkgext=\"tar.gz\"
+                source=(\"\${_pkgname}-canary-\$_pkgver.\$_pkgext\"::\"\$url/ob/Canary-\$_pkgver.\$_pkgext\")
+                sha256sums=(\x27SKIP\x27)
+              }
+              \"\"\"
+              content += \"\\n\" + custom_func
+
+              with open("PKGBUILD", "w") as f:
+                  f.write(content)
+              ' || true
             fi
 
             # Update pkgver and skip checksum check for freesmlauncher
