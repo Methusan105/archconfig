@@ -45,9 +45,10 @@ jobs:
               curl -sS https://download.spotify.com/debian/pubkey_5384CE82BA52C83A.gpg | gpg --import -
             fi
 
-            # Fix prepare() for ryujinx-canary
+            # Fix URL and prepare() for ryujinx-canary
             if [ \"${{ github.event.inputs.package_name }}\" = \"ryujinx-canary\" ]; then
-              echo 'Overriding prepare() in PKGBUILD for ryujinx-canary...'
+              echo 'Updating source URL and overriding prepare() in PKGBUILD for ryujinx-canary...'
+              sed -i 's#url=.*#url=\"https://starforgejo.dev/archive/Ryubing\"#' PKGBUILD || true
               sed -i '/prepare() {/,/}/c\prepare() {\n  cp \"\$_pkgsrc\"/global.json global.json 2>/dev/null || true\n  rm -f global.json \"\$_pkgsrc\"/global.json\n}' PKGBUILD || true
             fi
 
@@ -59,7 +60,7 @@ jobs:
             fi
             
             # Fix PKGBUILD and build environment for OpenNOW 1.0.1
-            if [ "${{ github.event.inputs.package_name }}" = "opennow" ]; then
+            if [ \"${{ github.event.inputs.package_name }}\" = \"opennow\" ]; then
               echo 'Updating pkgver and build flags for OpenNOW 1.0.1...'
               
               # 1. Update pkgver and _pkgver to 1.0.1
@@ -76,8 +77,8 @@ jobs:
               # 4. Export compiler flags for Rust ring-core assembly compilation
               export CC=clang
               export CXX=clang++
-              export CFLAGS=""
-              export LDFLAGS=""
+              export CFLAGS=\"\"
+              export LDFLAGS=\"\"
             fi
 
             # Build package
