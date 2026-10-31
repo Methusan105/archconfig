@@ -52,6 +52,12 @@ jobs:
               sed -i 's/^pkgver=2\.3\.0$/pkgver=2.3.1/' PKGBUILD || true
               sed -i \"s/^sha256sums=(.*/sha256sums=('SKIP')/\" PKGBUILD || true
             fi
+            
+            # Update pkgver and skip checksum check for freesmlauncher
+            if [ \"${{ github.event.inputs.package_name }}\" = \"helium-browser-bin\" ]; then
+              echo 'Importing Helium Browser OpenPGP key'
+              gpg --keyserver-options timeout=10 --keyserver hkps://keyserver.ubuntu.com --recv-keys BE677C1989D35EAB2C5F26C9351601AD01D6378E
+            fi
 
             # Build package
             makepkg -s --noconfirm || true
